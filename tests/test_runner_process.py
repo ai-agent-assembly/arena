@@ -104,3 +104,15 @@ def test_process_runner_enforces_timeout_without_raising(tmp_path: Path) -> None
     # A generous upper bound so this stays reliable under CI load, while
     # still proving the runner didn't just wait out the 60s sleep.
     assert result.duration_seconds < 30.0
+
+
+def test_process_runner_nonexistent_command_does_not_raise(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    manifest = _manifest("arena-test-definitely-not-a-real-command-xyz")
+
+    result = ProcessRunner().run(manifest, _TRIAL, workspace=workspace)
+
+    assert result.exit_code != 0
+    assert "failed to launch" in result.stderr
+    assert "arena-test-definitely-not-a-real-command-xyz" in result.stderr
+    assert result.stdout == ""
