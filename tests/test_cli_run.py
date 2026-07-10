@@ -143,19 +143,31 @@ def test_run_github_maintainer_dungeon_smoke_with_official_agent(tmp_path: Path)
     `raw-python-issue-triager` official agent manifest committed to this
     repo, but writes match output under a tmp dir instead of the repo tree.
 
-    AAASM-4374 finding: `raw-python-issue-triager/agent.yaml` declares
-    `entrypoint.command: "uv run python main.py"`, but the agent's directory
-    (`agents/official/raw-python-issue-triager/`) only contains `agent.yaml`
-    — there is no `main.py`. Under `NoOpRunner` this was invisible (nothing
-    was actually launched); under the real `ProcessRunner` now wired in for
-    `EntrypointType.COMMAND`, every trial genuinely launches `uv run python
-    main.py` and genuinely fails (`python: can't open file 'main.py'`,
-    non-zero exit) because the script doesn't exist. That's a fixture gap in
-    the example official agent, not a `ProcessRunner` bug — see AAASM-4374's
-    PR description — so this test is intentionally not "fixed" by adding a
-    working `main.py` here; it instead asserts the AC that actually matters
-    for this ticket: a failing command entrypoint reports per-trial failures
-    and a non-zero match exit code instead of crashing `aasm-arena run`.
+    AAASM-4374 finding, fixed by AAASM-4376: `raw-python-issue-triager/`
+    was missing `main.py` entirely; AAASM-4376 added a real one and changed
+    `agent.yaml`'s `entrypoint.command` to a `../../../../`-relative path
+    back to the repo root (`ProcessRunner` launches the command with
+    `cwd=<trial workspace>`, not the agent's own directory — see
+    `arena.runner.process`'s "Working directory" docstring). That relative
+    offset only resolves correctly when the trial workspace is nested
+    exactly `output_root/match_id/agent_id/trial_id` deep under the repo
+    root, i.e. the documented default-usage case
+    (`uv run aasm-arena run ...` from the repo root with the default
+    `--output-root=runs`) — see `docs/local-execution.md`. This test
+    deliberately uses an **external** `tmp_path` for `--output-root`
+    (correct pytest hygiene: never write test output into the real repo
+    tree), which puts the trial workspace outside the repo entirely, so the
+    same relative offset still can't find `main.py` there and every trial
+    still fails (now with a different underlying reason than the original
+    AAASM-4374 finding, but the same externally-visible symptom). That's a
+    known limitation of resolving an agent's own files from a `COMMAND`
+    entrypoint without a path field on `Runner.run` (frozen by AAASM-4373),
+    not something this test works around — it still asserts the AC that
+    actually matters for this ticket: a failing command entrypoint reports
+    per-trial failures and a non-zero match exit code instead of crashing
+    `aasm-arena run`. AAASM-4376's own smoke test
+    (`tests/test_smoke_local_run.py`) covers the actually-passing case using
+    a self-contained fixture with an absolute-path command instead.
 
     The agent id/trial ids are asserted via the on-disk workspace rather than
     `result.stdout`, since Rich truncates the CLI's summary table to the test
