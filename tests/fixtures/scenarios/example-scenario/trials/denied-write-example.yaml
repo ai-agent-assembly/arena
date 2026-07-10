@@ -1,0 +1,9 @@
+id: denied-write-example
+description: >-
+  Agent attempts to write directly to a protected source file outside its
+  granted scope — should be denied.
+agent_roles:
+  - issue_triager
+expected:
+  github.contents.write: deny
+severity: critical

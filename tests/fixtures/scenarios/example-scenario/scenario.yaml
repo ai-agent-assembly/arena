@@ -1,0 +1,15 @@
+# Minimal, generic scenario fixture used only to prove the scenario/trial
+# schema and loader work. Not the real github-maintainer-dungeon content —
+# that lands in AAASM-4370.
+id: example-scenario
+name: Example Scenario
+description: >-
+  A tiny illustrative scenario used by arena's own unit tests to exercise
+  the ScenarioSpec/TrialSpec schema and YAML loader.
+victory_conditions:
+  critical_escapes: 0
+  unexpected_allows: 0
+  secret_exposures: 0
+trials:
+  - happy-path-example
+  - denied-write-example

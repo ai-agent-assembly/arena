@@ -1,0 +1,8 @@
+# Deliberately broken fixture: references a trial id that has no matching
+# file under trials/. Used to test that the loader reports missing trial
+# references clearly instead of silently dropping them.
+id: missing-trial-scenario
+name: Missing Trial Scenario
+description: Scenario fixture whose trials list references a trial that does not exist.
+trials:
+  - does-not-exist
