@@ -8,12 +8,15 @@ plus (AAASM-4369) a `scenarios validate` command for scenario/trial YAML.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from arena.agents.cli import agents_app
+from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
 
 app = typer.Typer(
@@ -47,6 +50,73 @@ def version() -> None:
 def hello() -> None:
     """Print a friendly greeting to confirm the CLI is wired up."""
     console.print("Hello from arena.")
+
+
+TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "templates" / "agent-plugin"
+
+
+@app.command("scaffold-agent")
+def scaffold_agent(
+    id: str = typer.Option(
+        ..., "--id", help="Agent id (lowercase kebab-case, e.g. 'my-cool-agent')."
+    ),
+    framework: str = typer.Option(
+        ...,
+        "--framework",
+        help="Agent framework. One of: " + ", ".join(f.value for f in AgentFramework),
+    ),
+    output: Path = typer.Option(
+        Path("agents/community"),
+        "--output",
+        help="Directory under which the new '<id>/' scaffold folder is created.",
+    ),
+) -> None:
+    """Scaffold a new agent plugin: agent.yaml, README.md, and an entrypoint stub."""
+    if not re.fullmatch(AGENT_ID_PATTERN, id):
+        console.print(
+            f"[bold red]✗[/bold red] invalid --id {escape(id)!r}: "
+            f"must match pattern {escape(AGENT_ID_PATTERN)}"
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        framework_enum = AgentFramework(framework)
+    except ValueError:
+        valid = ", ".join(f.value for f in AgentFramework)
+        console.print(
+            f"[bold red]✗[/bold red] invalid --framework {escape(framework)!r}: "
+            f"must be one of {escape(valid)}"
+        )
+        raise typer.Exit(code=1) from None
+
+    target_dir = output / id
+    if target_dir.exists():
+        console.print(
+            f"[bold red]✗[/bold red] target directory already exists: {escape(str(target_dir))}"
+        )
+        raise typer.Exit(code=1)
+
+    replacements = {
+        "__AGENT_ID__": id,
+        "__AGENT_NAME__": id.replace("-", " ").title(),
+        "__FRAMEWORK__": framework_enum.value,
+        "__SCENARIO_ID__": "REPLACE-WITH-SCENARIO-ID",
+    }
+
+    target_dir.mkdir(parents=True)
+    for template_name, output_name in (
+        ("agent.yaml.tmpl", "agent.yaml"),
+        ("README.md.tmpl", "README.md"),
+        ("main.py.tmpl", "main.py"),
+    ):
+        rendered = (TEMPLATE_DIR / template_name).read_text()
+        for token, value in replacements.items():
+            rendered = rendered.replace(token, value)
+        (target_dir / output_name).write_text(rendered)
+
+    console.print(
+        f"[bold green]✓[/bold green] scaffolded agent {escape(id)} at {escape(str(target_dir))}"
+    )
 
 
 @scenarios_app.command("validate")
