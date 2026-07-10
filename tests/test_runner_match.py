@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from arena.integrations.adapter import AdapterChoice
 from arena.registry.discovery import discover_agents
 from arena.runner.events import MatchEvent, MatchEventType
 from arena.runner.match import (
@@ -88,6 +89,22 @@ def match_config(tmp_path: Path) -> MatchConfig:
         community_root=community_root,
         output_root=tmp_path / "runs",
     )
+
+
+# --- MatchConfig.adapter ----------------------------------------------------
+
+
+def test_match_config_defaults_to_fake_adapter(match_config: MatchConfig) -> None:
+    # AAASM-4378: the fake/real adapter choice knob defaults to fake, since
+    # no real agent-assembly connector exists yet. Not yet consumed by
+    # run_match itself — see MatchConfig.adapter's docstring.
+    assert match_config.adapter is AdapterChoice.FAKE
+
+
+def test_match_config_adapter_is_settable(tmp_path: Path) -> None:
+    config = MatchConfig(output_root=tmp_path / "runs", adapter=AdapterChoice.REAL)
+
+    assert config.adapter is AdapterChoice.REAL
 
 
 # --- generate_match_id ------------------------------------------------------
