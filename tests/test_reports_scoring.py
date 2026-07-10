@@ -292,3 +292,23 @@ def test_score_match_missing_audit_can_be_tolerated_when_configured() -> None:
 
     assert score.missing_audits == 1
     assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_WINS
+
+
+# --- agent runtime failures -----------------------------------------------------------
+
+
+def test_score_match_agent_runtime_failure_is_tracked_without_alone_losing() -> None:
+    trial = _trial(
+        id="happy-trial", expected={"some.action": Decision.ALLOW}, severity=Severity.LOW
+    )
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial, passed=False, error="runner blew up")],
+        critical_escapes=0,
+    )
+
+    score = score_match(match_result, scenario, audit_events=[])
+
+    assert score.agent_runtime_failures == 1
+    assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_WINS
