@@ -226,5 +226,9 @@ __marimo__/
 /runs/
 
 # AAASM-4390: default match report artifact root (`aasm-arena run`'s
-# `--reports-root`) — generated output, not source.
-/reports/
+# `--reports-root`) — generated output, not source. Ignore contents only
+# (not the directory itself), so AAASM-4397's checked-in `reports/README.md`
+# (documenting the static artifact layout) can be un-ignored below — a
+# parent-directory ignore rule would otherwise make that override impossible.
+/reports/*
+!/reports/README.md
