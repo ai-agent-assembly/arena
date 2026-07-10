@@ -43,7 +43,7 @@ These are regenerated with `uv run python scripts/generate_report_samples.py` an
 
 ## Submitting an agent
 
-At a high level, adding an agent to Arena means submitting a **manifest** — a YAML file describing how to build/run your agent, which framework it uses, and which scenarios it's eligible for — plus whatever plugin code the manifest points to. Submissions go through a public GitHub Issue Form and a PR, the same as any other contribution.
+At a high level, adding an agent to Arena means submitting a **manifest** — a YAML file describing how to build/run your agent, which framework it uses, and which scenarios it's eligible for — plus whatever plugin code the manifest points to. Submissions go through a public [GitHub Issue Form](.github/ISSUE_TEMPLATE/submit-agent.yml) and a PR, the same as any other contribution. There are also forms to [request a new trial](.github/ISSUE_TEMPLATE/request-trial.yml) or [report an Arena failure](.github/ISSUE_TEMPLATE/report-arena-failure.yml).
 
 Untrusted, community-submitted agent code is never run with repository secrets or elevated CI credentials — it runs inside the sandboxed match runner (Docker or an isolated process boundary) with no access to Arena's own CI/repo secrets.
 
