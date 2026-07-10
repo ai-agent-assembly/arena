@@ -59,7 +59,11 @@ from arena.runner.base import AgentRunResult, Runner
 from arena.runner.docker import DockerRunner
 from arena.runner.events import MatchEvent, MatchEventType
 from arena.runner.process import ProcessRunner
-from arena.scenarios.loader import ScenarioLoadError, load_scenario_registry
+from arena.scenarios.loader import (
+    ScenarioLoadError,
+    load_scenario_registry,
+    validate_trial_behaviors,
+)
 
 
 class MatchOrchestrationError(Exception):
@@ -370,6 +374,17 @@ def run_match(
     try:
         agent_registry = discover_agents(config.official_root, config.community_root)
     except RegistryLoadError as exc:
+        raise MatchOrchestrationError(str(exc)) from exc
+
+    # AAASM-4404: validate against every agent compatible with this
+    # scenario, not just the (possibly `--agent`-narrowed) `selected` list
+    # below — "no compatible agent declares this behavior" is a scenario-
+    # authoring problem independent of which agent a single run happens to
+    # pick.
+    compatible_manifests = [agent.manifest for agent in agent_registry.filter(scenario=scenario_id)]
+    try:
+        validate_trial_behaviors(bundle, compatible_manifests)
+    except ScenarioLoadError as exc:
         raise MatchOrchestrationError(str(exc)) from exc
 
     selected = select_agents(agent_registry, scenario_id, agent_id)
