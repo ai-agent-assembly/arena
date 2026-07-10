@@ -1,0 +1,30 @@
+# Official demo manifest for AAASM-4384: a LangGraph-based "docs agent" that
+# proves Arena can run a stateful, workflow-style agent (not just a single
+# script) while still routing every action attempt through the same
+# ARENA_ACTION_ATTEMPT marker mechanism as agents/official/
+# raw-python-issue-triager/. See that agent's manifest for why this lives
+# under agents/official/ rather than examples/.
+id: langgraph-docs-agent
+name: LangGraph Docs Agent
+framework: langgraph
+author:
+  github: ai-agent-assembly
+entrypoint:
+  # Same cwd caveat as raw-python-issue-triager/agent.yaml: `ProcessRunner`
+  # launches this with cwd set to the per-trial workspace
+  # (output_root/match_id/agent_id/trial_id, 4 segments deep under the
+  # default `--output-root=runs`), not this agent's own directory, so the
+  # command below assumes it is invoked from the repo root and offsets back
+  # to it with a relative "../../../../". This has the same limitation
+  # AAASM-4376 documented for raw-python-issue-triager: it breaks if
+  # --output-root nesting depth ever changes. See docs/local-execution.md.
+  type: command
+  command: "uv run python ../../../../agents/official/langgraph-docs-agent/main.py"
+runtime:
+  type: process
+scenarios:
+  - github-maintainer-dungeon
+capabilities:
+  - docs.write
+  - fs.read
+  - fs.write
