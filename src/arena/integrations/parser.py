@@ -15,10 +15,11 @@ from being recovered, mirroring `ProcessRunner`'s own "one broken agent
 process cannot crash the rest of a match" contract
 (`arena.runner.process`).
 
-Nothing in this module is wired into match orchestration yet. Turning
-captured stdout into audit/report data as part of a live match run is
-AAASM-4380's job (it owns audit/decision capture) — this module is the
-library function it calls to do so.
+`arena.runner.match.run_match` (AAASM-4380) is the caller: it parses every
+agent's captured stdout with `parse_action_attempts`, hands each recovered
+`ArenaActionAttempt` to the configured `AgentAssemblyClient`
+(`arena.integrations.adapter`), and persists the outcome via
+`arena.integrations.audit`.
 """
 
 from __future__ import annotations

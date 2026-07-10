@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import re
+import shlex
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from arena.integrations.adapter import AdapterChoice
+from arena.integrations.audit import REDACTION_MARKER, AuditEventStatus, read_audit_events
 from arena.registry.discovery import discover_agents
 from arena.runner.events import MatchEvent, MatchEventType
 from arena.runner.match import (
@@ -96,8 +100,8 @@ def match_config(tmp_path: Path) -> MatchConfig:
 
 def test_match_config_defaults_to_fake_adapter(match_config: MatchConfig) -> None:
     # AAASM-4378: the fake/real adapter choice knob defaults to fake, since
-    # no real agent-assembly connector exists yet. Not yet consumed by
-    # run_match itself — see MatchConfig.adapter's docstring.
+    # no real agent-assembly connector exists yet — see
+    # MatchConfig.adapter's docstring for how run_match consumes it.
     assert match_config.adapter is AdapterChoice.FAKE
 
 
@@ -294,3 +298,234 @@ def test_run_match_is_deterministic_across_independent_runs(match_config: MatchC
     assert first.victory_conditions_violated == second.victory_conditions_violated
     # match ids are still unique per run even with the same `now`.
     assert first.match_id != second.match_id
+
+
+# --- real decision wiring / audit persistence (AAASM-4380) -------------------
+
+#: A test-only agent that emits one `ArenaActionAttempt` per configured
+#: action for whatever trial it's currently running, then exits 0. Uses
+#: `sys.executable` plus an absolute script path (like
+#: `tests/test_smoke_local_run.py`'s fixture) so it resolves correctly
+#: regardless of where its trial workspace ends up.
+_EMIT_AGENT_SCRIPT_TEMPLATE = '''\
+"""Test-only agent: emits one ArenaActionAttempt per configured action for
+its current trial, then exits 0."""
+import os
+
+from arena.integrations.emit import emit_action_attempt
+
+_ACTIONS_BY_TRIAL = {actions_json}
+
+trial_id = os.environ.get("ARENA_TRIAL_ID", "")
+for tool, resource, args in _ACTIONS_BY_TRIAL.get(trial_id, []):
+    emit_action_attempt(
+        tool=tool,
+        resource=resource,
+        framework="raw-python",
+        scenario_id={scenario_id!r},
+        args=args,
+    )
+'''
+
+
+def _write_emitting_agent(
+    official_root: Path,
+    agent_id: str,
+    scenario_id: str,
+    scenario_ids: list[str],
+    actions_by_trial: dict[str, list[tuple[str, str, dict[str, str]]]],
+) -> None:
+    agent_dir = official_root / agent_id
+    agent_dir.mkdir(parents=True)
+    script_path = agent_dir / "main.py"
+    script_path.write_text(
+        _EMIT_AGENT_SCRIPT_TEMPLATE.format(
+            actions_json=json.dumps(actions_by_trial), scenario_id=scenario_id
+        )
+    )
+    command = f"{shlex.quote(sys.executable)} {shlex.quote(str(script_path))}"
+    scenarios_yaml = "\n".join(f"  - {sid}" for sid in scenario_ids)
+    (agent_dir / "agent.yaml").write_text(
+        f"id: {agent_id}\n"
+        f"name: {agent_id.title()}\n"
+        f"framework: raw-python\n"
+        f"entrypoint:\n"
+        f"  type: command\n"
+        f'  command: "{command}"\n'
+        f"runtime:\n"
+        f"  type: process\n"
+        f"scenarios:\n{scenarios_yaml}\n"
+    )
+
+
+def _write_custom_scenario(
+    root: Path,
+    scenario_id: str,
+    trial_id: str,
+    expected: dict[str, str],
+    severity: str = "high",
+) -> None:
+    scenario_dir = root / scenario_id
+    trials_dir = scenario_dir / "trials"
+    trials_dir.mkdir(parents=True)
+    (scenario_dir / "scenario.yaml").write_text(
+        f"id: {scenario_id}\n"
+        f"name: Test Scenario\n"
+        f"description: Scenario used for audit/decision wiring tests.\n"
+        f"trials:\n"
+        f"  - {trial_id}\n"
+    )
+    expected_yaml = "\n".join(f"  {action}: {decision}" for action, decision in expected.items())
+    (trials_dir / f"{trial_id}.yaml").write_text(
+        f"id: {trial_id}\n"
+        f"description: A trial used for audit/decision wiring tests.\n"
+        f"expected:\n{expected_yaml}\n"
+        f"severity: {severity}\n"
+    )
+
+
+def test_run_match_writes_audit_jsonl_covering_every_decision_type(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+
+    expected = {
+        "action.allow": "allow",
+        "action.deny": "deny",
+        "action.ask": "ask",
+        "action.redact": "redact",
+        "action.drop": "drop",
+        "action.quarantine": "quarantine",
+    }
+    _write_custom_scenario(
+        scenarios_root, "all-decisions-scenario", "all-decisions-trial", expected
+    )
+    actions: dict[str, list[tuple[str, str, dict[str, str]]]] = {
+        "all-decisions-trial": [(action, "some/resource", {}) for action in expected]
+    }
+    _write_emitting_agent(
+        official_root, "emit-agent", "all-decisions-scenario", ["all-decisions-scenario"], actions
+    )
+
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=tmp_path / "runs",
+    )
+    result = run_match("all-decisions-scenario", config)
+
+    events = read_audit_events(result.workspace / "audit.jsonl")
+    assert len(events) == len(expected)
+    assert {event.status for event in events} == {AuditEventStatus.DECIDED}
+    actual_effects = {
+        event.attempt.tool: event.decision.effect.value
+        for event in events
+        if event.attempt is not None and event.decision is not None
+    }
+    assert actual_effects == expected
+
+    assert result.trial_outcomes[0].passed is True
+
+
+def test_run_match_missing_decision_does_not_crash_and_fails_trial(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+
+    _write_custom_scenario(
+        scenarios_root,
+        "missing-decision-scenario",
+        "missing-decision-trial",
+        {"known.action": "allow"},
+    )
+    actions: dict[str, list[tuple[str, str, dict[str, str]]]] = {
+        "missing-decision-trial": [
+            ("known.action", "some/resource", {}),
+            ("unlisted.action", "some/resource", {}),
+        ]
+    }
+    _write_emitting_agent(
+        official_root,
+        "emit-agent",
+        "missing-decision-scenario",
+        ["missing-decision-scenario"],
+        actions,
+    )
+
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=tmp_path / "runs",
+    )
+    # A MissingDecisionError for the unlisted action must not crash the
+    # match — it's recorded as a reportable failure, not an exception.
+    result = run_match("missing-decision-scenario", config)
+
+    outcome = result.trial_outcomes[0]
+    assert outcome.error is None
+    assert outcome.passed is False
+
+    events = read_audit_events(result.workspace / "audit.jsonl")
+    statuses = {event.attempt.tool: event.status for event in events if event.attempt is not None}
+    assert statuses["known.action"] is AuditEventStatus.DECIDED
+    assert statuses["unlisted.action"] is AuditEventStatus.MISSING_DECISION
+
+
+def test_run_match_passed_is_decision_based_not_exit_code_based(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+
+    _write_custom_scenario(
+        scenarios_root, "decision-based-scenario", "decision-based-trial", {"some.action": "allow"}
+    )
+    # This agent exits 0 without ever attempting "some.action". Under the
+    # old exit_code == 0 proxy this trial would have shown PASS; under real
+    # decision-based scoring it must FAIL — the trial's one expected action
+    # was never attempted, so there's no decision evidence for it at all.
+    _write_emitting_agent(
+        official_root, "silent-agent", "decision-based-scenario", ["decision-based-scenario"], {}
+    )
+
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=tmp_path / "runs",
+    )
+    result = run_match("decision-based-scenario", config)
+
+    outcome = result.trial_outcomes[0]
+    assert outcome.result.exit_code == 0
+    assert outcome.passed is False
+
+
+def test_run_match_redacts_persisted_args_for_redact_decision(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+
+    _write_custom_scenario(
+        scenarios_root, "redact-scenario", "redact-trial", {"log.write": "redact"}
+    )
+    actions = {"redact-trial": [("log.write", "logs/output.txt", {"body": "sk-fake-secret-value"})]}
+    _write_emitting_agent(
+        official_root, "emit-agent", "redact-scenario", ["redact-scenario"], actions
+    )
+
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=tmp_path / "runs",
+    )
+    result = run_match("redact-scenario", config)
+
+    assert result.trial_outcomes[0].passed is True
+
+    raw_lines = (result.workspace / "audit.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(raw_lines) == 1
+    payload = json.loads(raw_lines[0])
+    assert payload["attempt"]["args"] == {"body": REDACTION_MARKER}

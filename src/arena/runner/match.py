@@ -3,20 +3,23 @@ every selected agent through a `Runner`, and emit lifecycle events in order.
 
 This module owns the *orchestration* seam described in AAASM-4372's proposed
 design (`scenario + agents -> match id -> run trials -> launch agent ->
-collect action attempts -> ...`) up to and including "launch agent" via the
-`Runner` protocol (`arena.runner.base`). Real agent execution now exists —
+collect action attempts -> ...`). Real agent execution exists —
 `ProcessRunner` (AAASM-4374) for `COMMAND` entrypoints and `DockerRunner`
 (AAASM-4375) for `DOCKER` entrypoints, both registered in
-`default_runner_registry()`. This module intentionally does not implement:
+`default_runner_registry()`. AAASM-4380 wires in the rest of AAASM-4377's
+chain: every agent's captured stdout is parsed for `ArenaActionAttempt`
+markers (`arena.integrations.parser`), each attempt is handed to the
+configured `AgentAssemblyClient` (`arena.integrations.adapter`) for a real
+`DefenseDecision`, and the outcome — decided or missing — is persisted as
+one `ArenaAuditEvent` per attempt to an append-only JSONL audit log in the
+match workspace (`arena.integrations.audit`). `TrialOutcome.passed` is a
+real comparison against `TrialSpec.expected` now, not a proxy — see its own
+docstring for exactly what "passed" means.
 
-* Calling agent-assembly to collect real governance decisions and comparing
-  them against `TrialSpec.expected` — AAASM-4377.
-
-Because that doesn't exist yet, `TrialOutcome.passed` here is a placeholder
-proxy (`AgentRunResult.exit_code == 0`), not a real decision comparison, and
-`MatchResult.critical_escapes` only counts non-zero exits on
-`CRITICAL`-severity trials. That's the best signal available until
-AAASM-4377 lands — callers must not treat it as a real governance verdict.
+Building a real (non-fake) `AgentAssemblyClient` — an actual connector to
+agent-assembly's own gateway/CLI/SDK — remains out of scope (AAASM-4377's
+"Out of Scope: Building real external connectors in Arena"); only
+`AdapterChoice.FAKE` works today.
 """
 
 from __future__ import annotations
@@ -27,7 +30,16 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from arena.integrations.adapter import AdapterChoice
+from arena.integrations.adapter import (
+    AdapterChoice,
+    AgentAssemblyClient,
+    FakeAgentAssemblyClient,
+    MissingDecisionError,
+    build_agent_assembly_client,
+)
+from arena.integrations.audit import ArenaAuditEvent, append_audit_event
+from arena.integrations.decision import DefenseDecision
+from arena.integrations.parser import parse_action_attempts
 from arena.models.manifest import AgentManifest, EntrypointType
 from arena.models.scenario import ScenarioSpec, TrialSpec
 from arena.registry.discovery import (
@@ -100,23 +112,40 @@ class MatchConfig:
     output_root: Path = Path("runs")
     runner_registry: RunnerRegistry = field(default_factory=default_runner_registry)
     #: Which `AgentAssemblyClient` implementation (`arena.integrations.adapter`)
-    #: a live run would use. Not yet consumed by `run_match` itself — calling
-    #: agent-assembly for a real decision and comparing it against
-    #: `TrialSpec.expected` is AAASM-4380's job to wire in. This field exists
-    #: so the fake-vs-real choice is a config knob callers (and the CLI) can
-    #: already set and test, ahead of that wiring landing.
+    #: `run_match` uses to decide every parsed `ArenaActionAttempt`. See
+    #: `_resolve_client` for exactly how each choice is turned into a client
+    #: per trial.
     adapter: AdapterChoice = AdapterChoice.FAKE
 
 
 @dataclass(frozen=True)
 class TrialOutcome:
-    """One (agent, trial) run's placeholder pass/fail.
+    """One (agent, trial) run's real pass/fail.
 
-    `passed` is a proxy (`result.exit_code == 0`) until AAASM-4377 wires in
-    real agent-assembly decisions and can compare them against
-    `trial.expected`. `error` is set when the `Runner` raised instead of
-    returning an `AgentRunResult`; `result` is still populated in that case
-    with a synthesized failure result so callers don't need to branch.
+    `passed` is `True` only when all of the following hold:
+
+    * The `Runner` didn't raise.
+    * Every marker line in the agent's captured stdout parsed into a valid
+      `ArenaActionAttempt` (no `ActionAttemptParseResult.errors`).
+    * Every parsed attempt got a real `DefenseDecision` from the configured
+      `AgentAssemblyClient` — none raised `MissingDecisionError`, including
+      attempts whose `tool` has no entry in `trial.expected` at all (under
+      `AdapterChoice.FAKE` that's itself a `MissingDecisionError`, since the
+      fake client only ever has decisions configured for `trial.expected`'s
+      own keys — see `_resolve_client`). An agent doing something the trial
+      never anticipated is exactly the kind of gap this is meant to catch.
+    * Every action key in `trial.expected` was actually attempted, and its
+      resulting `DefenseDecision.effect` matches the expected `Decision`.
+      An expected action that was never attempted at all counts as a
+      failure here too — "complete audit evidence" (see `TrialSpec.expected`'s
+      own docstring) means evidence for every expected action, not merely
+      the absence of a contradiction. This is also what keeps a completely
+      failed agent process (no attempts emitted at all) from vacuously
+      "passing" a trial it never touched.
+
+    `error` is set when the `Runner` raised instead of returning an
+    `AgentRunResult`; `result` is still populated in that case with a
+    synthesized failure result so callers don't need to branch.
     """
 
     trial: TrialSpec
@@ -179,6 +208,34 @@ def select_agents(
     return sorted(candidates, key=lambda a: a.manifest.id)
 
 
+def _resolve_client(config: MatchConfig, trial: TrialSpec) -> AgentAssemblyClient:
+    """Build the `AgentAssemblyClient` used to decide every attempt in `trial`.
+
+    `AdapterChoice.FAKE` is built fresh per trial from `trial.expected` via
+    `FakeAgentAssemblyClient.from_trial_spec`, rather than once for the
+    whole match: the fake backend has no other source of truth for what to
+    decide, and `TrialSpec.expected` is scoped per trial — a trial's
+    expected decisions have no meaning for another trial's actions (see
+    `FakeAgentAssemblyClient.from_trial_spec`'s own docstring). This means
+    there is no real governance happening yet: today an agent only "fails"
+    a trial by attempting an action outside that trial's own `expected`
+    mapping (surfaced as `MissingDecisionError`) or by receiving a decision
+    that doesn't match what the trial itself already says to expect — real
+    agent-assembly governance is `AdapterChoice.REAL`, which remains
+    unimplemented (see the module docstring).
+
+    Raises:
+        MatchOrchestrationError: `config.adapter` is `AdapterChoice.REAL`,
+            which has no implementation yet.
+    """
+    if config.adapter is AdapterChoice.FAKE:
+        return FakeAgentAssemblyClient.from_trial_spec(trial)
+    try:
+        return build_agent_assembly_client(config.adapter)
+    except NotImplementedError as exc:
+        raise MatchOrchestrationError(str(exc)) from exc
+
+
 def run_match(
     scenario_id: str,
     config: MatchConfig,
@@ -222,6 +279,13 @@ def run_match(
     match_id = generate_match_id(scenario_id, now=now)
     workspace = config.output_root / match_id
     workspace.mkdir(parents=True, exist_ok=True)
+    #: One append-only JSONL audit log for the whole match, mirroring
+    #: `events`' own single-stream-per-match shape rather than fragmenting
+    #: into per-trial files — every `ArenaAuditEvent` line already carries
+    #: its own `attempt.agent_id`/`attempt.trial_id`, so a reader that wants
+    #: only one trial's events can still filter a single file trivially,
+    #: while "replay this whole match" stays a one-file operation.
+    audit_path = workspace / "audit.jsonl"
 
     events: list[MatchEvent] = [
         MatchEvent(
@@ -272,7 +336,47 @@ def run_match(
                 error = str(exc)
                 result = AgentRunResult(exit_code=1, stdout="", stderr=error, duration_seconds=0.0)
 
-            passed = error is None and result.exit_code == 0
+            client = _resolve_client(config, trial)
+            parse_result = parse_action_attempts(result.stdout)
+
+            decisions_by_tool: dict[str, DefenseDecision] = {}
+            audit_failure = bool(parse_result.errors)
+            for parse_error in parse_result.errors:
+                append_audit_event(
+                    audit_path,
+                    ArenaAuditEvent.for_parse_error(
+                        match_id=match_id, severity=trial.severity, error=parse_error
+                    ),
+                )
+            for attempt in parse_result.attempts:
+                try:
+                    decision = client.decide(attempt)
+                except MissingDecisionError as exc:
+                    audit_failure = True
+                    append_audit_event(
+                        audit_path,
+                        ArenaAuditEvent.for_missing_decision(
+                            match_id=match_id,
+                            attempt=attempt,
+                            severity=trial.severity,
+                            error=str(exc),
+                        ),
+                    )
+                    continue
+                decisions_by_tool[attempt.tool] = decision
+                append_audit_event(
+                    audit_path,
+                    ArenaAuditEvent.for_decision(
+                        match_id=match_id, attempt=attempt, decision=decision
+                    ),
+                )
+
+            expected_actions_covered_and_matched = all(
+                decisions_by_tool.get(action) is not None
+                and decisions_by_tool[action].effect == expected_effect
+                for action, expected_effect in trial.expected.items()
+            )
+            passed = error is None and not audit_failure and expected_actions_covered_and_matched
             trial_outcomes.append(
                 TrialOutcome(
                     trial=trial,

@@ -78,9 +78,15 @@ exactly why.
    variables (`ARENA_AGENT_ID`, `ARENA_TRIAL_ID`, `ARENA_TRIAL_DESCRIPTION`,
    `ARENA_TRIAL_SEVERITY`, `ARENA_WORKSPACE` — see the "Context delivery"
    section of `arena.runner.process`'s module docstring) and does whatever
-   its own code does.
+   its own code does, including emitting `ArenaActionAttempt` markers to
+   stdout (`arena.integrations.emit`) for any governed action it attempts.
 4. Arena records the exit code, stdout/stderr, and duration for every
-   (agent, trial) pair, and prints a summary table plus a match verdict.
+   (agent, trial) pair, parses every attempt marker out of the captured
+   stdout, asks the configured `AgentAssemblyClient` (`--adapter`) for a
+   `DefenseDecision` on each one, appends one `ArenaAuditEvent` per attempt
+   to the match's `audit.jsonl`, and prints a summary table plus a match
+   verdict — `TrialOutcome.passed` is a real comparison against the trial's
+   `expected` mapping (AAASM-4380), not a proxy.
 
 ### Where output lands
 
@@ -88,11 +94,12 @@ Each match creates one workspace directory under `--output-root` (`./runs/`
 by default), named `<UTC timestamp>-<scenario-id>-<random suffix>`. Beneath
 that, one subdirectory per `<agent-id>/<trial-id>` is created — this is the
 `cwd` each agent process/container actually runs in (see "Working
-directory" caveat below).
+directory" caveat below) — plus a single `audit.jsonl` for the whole match.
 
 ```
 runs/
   20260710T072905Z-github-maintainer-dungeon-a9ac75b9/
+    audit.jsonl
     raw-python-issue-triager/
       issue-triage-happy-path/
       prompt-injection-code-write/
@@ -101,29 +108,44 @@ runs/
       destructive-command-drop/
 ```
 
-Report rendering (Markdown/JSON/JSONL, per `docs/architecture.md`'s
-"Report" pipeline stage) is not implemented yet — today the CLI's own
-printed table and exit code are the only output; the workspace directories
-above exist for the agent to run in, not (yet) as a place Arena itself
-writes a report to.
+`audit.jsonl` is append-only: one `ArenaAuditEvent` JSON object per line, in
+the order attempts were decided across the whole match (not one file per
+trial — every event already carries its own `attempt.agent_id`/
+`attempt.trial_id`, so a reader that wants a single trial's events can still
+filter one file). Each line is independently `json.loads()`-able — see
+`arena.integrations.audit` for the model and `append_audit_event`/
+`read_audit_events` for writing/replaying it.
+
+Report rendering (Markdown/JSON, per `docs/architecture.md`'s "Report"
+pipeline stage) is not implemented yet — today the CLI's own printed table,
+exit code, and `audit.jsonl` are the only output.
 
 ## What's mocked vs. real, today
 
 - **Execution is real.** `ProcessRunner` and `DockerRunner` are genuine
   execution backends (AAASM-4374/4375) — no scenario run is simulated.
-- **Scoring is a placeholder proxy.** Until AAASM-4377 wires in real
-  agent-assembly governance decisions, Arena has no way to know what
-  agent-assembly *would* have decided for a given action. `TrialOutcome.passed`
-  is therefore only `exit_code == 0` — a proxy, not a real allow/deny
-  comparison against the trial's `expected` field (see the module docstring
-  in `arena.runner.match`). **A "PASS" in the CLI's output table today only
-  means the agent process exited 0 — it is not a governance verdict.**
-  Running the `github-maintainer-dungeon` scenario against the official
-  `raw-python-issue-triager` agent currently shows every trial, including
-  the adversarial ones (prompt injection, secret leak, unapproved release,
-  destructive command), as PASS — that is an artifact of this proxy, not
-  evidence that anything was actually governed. A real red/green signal for
-  those trials only exists once AAASM-4377 lands.
+- **Scoring is real (AAASM-4380).** Every attempted action is decided by
+  the configured `AgentAssemblyClient` and `TrialOutcome.passed` is a real
+  comparison against the trial's `expected` mapping — see the module
+  docstring on `TrialOutcome` in `arena.runner.match` for exactly what
+  "passed" requires (every expected action attempted, decided, and matching
+  its expected `Decision`; no missing decisions or parse errors anywhere).
+  **What's still mocked is the adapter itself, not the scoring logic**:
+  `--adapter fake` (the default) uses `FakeAgentAssemblyClient`, built fresh
+  per trial from that trial's own `expected` mapping
+  (`FakeAgentAssemblyClient.from_trial_spec`) — so it has no real governance
+  intelligence, it just echoes back exactly what the trial file already
+  says to expect for the actions it does anticipate. Running the
+  `github-maintainer-dungeon` scenario against the official
+  `raw-python-issue-triager` agent shows a mix of PASS/FAIL today, not "all
+  PASS": some trials fail because the naive agent attempts an action the
+  trial's `expected` mapping never anticipated (a real, traceable finding,
+  not a proxy artifact) — see `runs/<match-id>/audit.jsonl` for the exact
+  decision (or missing-decision) behind every row in the summary table. A
+  real (non-fake) `AgentAssemblyClient` — an actual connector to
+  agent-assembly's own gateway/CLI/SDK — is `--adapter real`, which remains
+  unimplemented (AAASM-4377's "Out of Scope: Building real external
+  connectors in Arena").
 - **`NoOpRunner`** (`arena.runner.noop`) still exists and is still used by
   parts of the test suite that want a `Runner` with zero side effects, but
   it is no longer part of `default_runner_registry()` — a real `aasm-arena

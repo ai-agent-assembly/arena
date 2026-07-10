@@ -97,16 +97,18 @@ def run_command(
     Exits non-zero when the scenario's victory conditions are violated.
     Execution is real: `ProcessRunner` (AAASM-4374) actually launches
     `command`-type agents as subprocesses, and `DockerRunner` (AAASM-4375)
-    actually launches `docker`-type agents in containers. What's still a
-    placeholder is *scoring* — until AAASM-4380 wires real agent-assembly
-    governance decisions into orchestration, `TrialOutcome.passed` is only a
-    proxy (`exit_code == 0`), not a real allow/deny comparison; see the
-    module docstring in `arena.runner.match` and `docs/local-execution.md`.
+    actually launches `docker`-type agents in containers. Scoring is real
+    too (AAASM-4380): every attempted action is decided by the configured
+    `AgentAssemblyClient` and `TrialOutcome.passed` is a real comparison
+    against the trial's `expected` mapping, not a proxy — see the module
+    docstring in `arena.runner.match` for exactly what "passed" means, and
+    `docs/local-execution.md` for what's still mocked (only the adapter
+    itself, via `AdapterChoice.FAKE`).
 
     `--adapter` selects which `AgentAssemblyClient` (AAASM-4378,
-    `arena.integrations.adapter`) a live run would use once that wiring
-    lands; it's validated and stored on `MatchConfig.adapter` here, but not
-    yet consumed by `run_match` itself.
+    `arena.integrations.adapter`) the run uses to decide every attempted
+    action; it's validated and stored on `MatchConfig.adapter`, then
+    consumed by `run_match` for every trial.
     """
     try:
         adapter_choice = AdapterChoice(adapter)
