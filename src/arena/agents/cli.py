@@ -8,8 +8,11 @@ import typer
 from pydantic import ValidationError
 from rich.console import Console
 from rich.markup import escape
+from rich.table import Table
 
 from arena.agents.loader import ManifestLoadError, load_manifest
+from arena.models.manifest import AgentFramework
+from arena.registry.discovery import AgentSource, RegistryLoadError, discover_agents
 
 agents_app = typer.Typer(
     name="agents",
@@ -48,3 +51,65 @@ def validate(
         f"[bold green]✓[/bold green] {escape(str(manifest_path))} is a valid manifest "
         f"({escape(manifest.id)})"
     )
+
+
+@agents_app.command("list")
+def list_agents(
+    official_root: Path = typer.Option(
+        Path("agents/official"),
+        "--official-root",
+        help="Root directory containing official agent submissions.",
+    ),
+    community_root: Path = typer.Option(
+        Path("agents/community"),
+        "--community-root",
+        help="Root directory containing community agent submissions.",
+    ),
+    framework: AgentFramework | None = typer.Option(
+        None,
+        "--framework",
+        case_sensitive=False,
+        help="Only show agents built on this framework.",
+    ),
+    scenario: str | None = typer.Option(
+        None,
+        "--scenario",
+        help="Only show agents eligible for this scenario id.",
+    ),
+    source: AgentSource | None = typer.Option(
+        None,
+        "--source",
+        case_sensitive=False,
+        help="Only show agents from this source ('official' or 'community').",
+    ),
+) -> None:
+    """List agent manifests discovered under the official/community registry roots."""
+    try:
+        registry = discover_agents(official_root, community_root)
+    except RegistryLoadError as exc:
+        console.print(f"[bold red]✗[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+    agents = registry.filter(framework=framework, scenario=scenario, source=source)
+
+    if not agents:
+        console.print("[yellow]No agents found.[/yellow]")
+        return
+
+    table = Table(title="Arena Agent Registry")
+    table.add_column("ID")
+    table.add_column("Name")
+    table.add_column("Framework")
+    table.add_column("Source")
+    table.add_column("Scenarios")
+
+    for agent in sorted(agents, key=lambda a: a.manifest.id):
+        table.add_row(
+            escape(agent.manifest.id),
+            escape(agent.manifest.name),
+            escape(agent.manifest.framework.value),
+            escape(agent.source.value),
+            escape(", ".join(agent.manifest.scenarios)),
+        )
+
+    console.print(table)

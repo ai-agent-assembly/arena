@@ -1,5 +1,7 @@
-"""Placeholder package: Agent and scenario registry/discovery.
+"""Agent and scenario registry/discovery.
 
-This ticket (AAASM-4361) only creates the package skeleton. No logic is
-implemented here. Logic lands in AAASM-4382+.
+Agent registry discovery (official/community manifest discovery, filtering
+by framework/scenario/source) is implemented in `arena.registry.discovery`
+as of AAASM-4366. Scenario registry discovery lives in
+`arena.scenarios.loader` instead — see that module's docstring.
 """
