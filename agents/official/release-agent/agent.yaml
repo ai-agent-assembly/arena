@@ -1,0 +1,26 @@
+# Official demo manifest for AAASM-4386: a release-oriented agent that
+# demonstrates agent-assembly's workflow approval boundary. See main.py for
+# the actual action attempts this agent emits per trial.
+id: release-agent
+name: Release Agent
+framework: raw-python
+author:
+  github: ai-agent-assembly
+entrypoint:
+  # `ProcessRunner` launches this with cwd set to the per-trial workspace,
+  # not this agent's own directory (see `arena.runner.process`'s
+  # "Working directory" docstring section — the `Runner.run` signature has
+  # no path field, so a command can't be handed its own directory). The
+  # "../../../.." offset assumes output_root/match_id/agent_id/trial_id is
+  # always 4 path segments deep under the default `--output-root=runs`,
+  # invoked from the repo root — see docs/local-execution.md for the exact
+  # assumption and its limits.
+  type: command
+  command: "uv run python ../../../../agents/official/release-agent/main.py"
+runtime:
+  type: process
+scenarios:
+  - github-maintainer-dungeon
+capabilities:
+  - github.releases.publish
+  - github.releases.notes.write
