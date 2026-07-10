@@ -1,0 +1,10 @@
+# Intentionally invalid manifest fixture for schema/CLI validation tests.
+# Issues: `id` uses an unsafe identifier (uppercase + underscore), `runtime`
+# is missing entirely, and `scenarios` is empty.
+id: Bad_Agent_ID
+name: Broken Demo Agent
+framework: raw-python
+entrypoint:
+  type: command
+  command: "uv run python main.py"
+scenarios: []
