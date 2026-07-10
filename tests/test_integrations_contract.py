@@ -33,6 +33,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from arena.integrations.adapter import FakeAgentAssemblyClient
+from arena.integrations.audit import (
+    ArenaAuditEvent,
+    AuditEventStatus,
+    append_audit_event,
+    read_audit_events,
+)
 from arena.integrations.decision import DefenseDecision
 from arena.integrations.models import ArenaActionAttempt
 from arena.models.scenario import Decision, Severity
@@ -215,3 +221,83 @@ def test_run_match_calls_adapter_decide_exactly_once_per_parsed_attempt(tmp_path
         "unlisted.action.one",
         "unlisted.action.two",
     }
+
+
+# --- 2. No attempt's outcome is silently dropped from the audit trail --------
+
+
+def test_every_parsed_attempt_produces_exactly_one_audit_event(tmp_path: Path) -> None:
+    """`run_match` must write exactly one `ArenaAuditEvent` per parsed
+    attempt — a `DECIDED` event when the adapter returns a decision, a
+    `MISSING_DECISION` event when it raises. Neither case may vanish from
+    `audit.jsonl` silently: this asserts a strict bijection between "tools
+    the agent attempted" and "tools with an audit event," not merely that
+    *some* events exist.
+    """
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    _write_scenario(
+        scenarios_root,
+        "contract-scenario",
+        "audit-completeness-trial",
+        {"configured.allow": "allow", "configured.deny": "deny"},
+    )
+    actions: dict[str, list[tuple[str, str, dict[str, str]]]] = {
+        "audit-completeness-trial": [
+            ("configured.allow", "r1", {}),
+            ("configured.deny", "r2", {}),
+            ("unconfigured.action", "r3", {}),
+        ]
+    }
+    _write_emitting_agent(official_root, "emit-agent", "contract-scenario", actions)
+
+    result = run_match("contract-scenario", _match_config(tmp_path, scenarios_root, official_root))
+
+    events = read_audit_events(result.workspace / "audit.jsonl")
+    attempted_tools = {"configured.allow", "configured.deny", "unconfigured.action"}
+    audited_tools = {event.attempt.tool for event in events if event.attempt is not None}
+
+    # Bijection, not a subset check: every attempted tool has an event, and
+    # no event refers to a tool that was never attempted.
+    assert audited_tools == attempted_tools
+    assert len(events) == len(attempted_tools)
+
+    by_tool = {event.attempt.tool: event for event in events if event.attempt is not None}
+    assert by_tool["configured.allow"].status is AuditEventStatus.DECIDED
+    assert by_tool["configured.deny"].status is AuditEventStatus.DECIDED
+    assert by_tool["unconfigured.action"].status is AuditEventStatus.MISSING_DECISION
+    assert by_tool["unconfigured.action"].decision is None
+    assert by_tool["unconfigured.action"].error is not None
+
+    # The missing decision must also be visible in the trial's own outcome,
+    # not just the audit log — a trial with any missing-decision attempt is
+    # never allowed to report as passed.
+    assert result.trial_outcomes[0].passed is False
+
+
+def test_missing_decision_audit_event_is_written_before_loop_continues(tmp_path: Path) -> None:
+    """Narrower unit-level version of the invariant above, directly against
+    `ArenaAuditEvent`/`append_audit_event`/`read_audit_events` with no match
+    orchestration involved: a `MissingDecisionError` outcome for one attempt
+    must round-trip through the JSONL audit log exactly like a decided one —
+    there is no code path in the audit module itself that would let a
+    missing-decision outcome be dropped rather than persisted.
+    """
+    path = tmp_path / "audit.jsonl"
+    attempt = _attempt(tool="unlisted.action")
+
+    event = ArenaAuditEvent.for_missing_decision(
+        match_id="match-1",
+        attempt=attempt,
+        severity=Severity.CRITICAL,
+        error="no configured decision for trial_id='trial-a', tool='unlisted.action'",
+    )
+    append_audit_event(path, event)
+
+    replayed = read_audit_events(path)
+    assert len(replayed) == 1
+    assert replayed[0].status is AuditEventStatus.MISSING_DECISION
+    assert replayed[0].attempt is not None
+    assert replayed[0].attempt.tool == "unlisted.action"
+    assert replayed[0].decision is None
+    assert replayed[0].severity is Severity.CRITICAL
