@@ -14,9 +14,11 @@ from pathlib import Path
 import typer
 from rich.console import Console
 from rich.markup import escape
+from rich.table import Table
 
 from arena.agents.cli import agents_app
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
+from arena.runner.match import MatchConfig, MatchOrchestrationError, run_match
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
 
 app = typer.Typer(
@@ -50,6 +52,90 @@ def version() -> None:
 def hello() -> None:
     """Print a friendly greeting to confirm the CLI is wired up."""
     console.print("Hello from arena.")
+
+
+@app.command("run")
+def run_command(
+    scenario_id: str = typer.Argument(
+        ..., help="Scenario id to run, e.g. 'github-maintainer-dungeon'."
+    ),
+    agent: str | None = typer.Option(
+        None,
+        "--agent",
+        help="Run only this agent id instead of every agent compatible with the scenario.",
+    ),
+    scenarios_root: Path = typer.Option(
+        Path("scenarios"),
+        "--scenarios-root",
+        help="Root directory containing scenario folders.",
+    ),
+    official_root: Path = typer.Option(
+        Path("agents/official"),
+        "--official-root",
+        help="Root directory containing official agent submissions.",
+    ),
+    community_root: Path = typer.Option(
+        Path("agents/community"),
+        "--community-root",
+        help="Root directory containing community agent submissions.",
+    ),
+    output_root: Path = typer.Option(
+        Path("runs"),
+        "--output-root",
+        help="Root directory under which each match's report workspace is created.",
+    ),
+) -> None:
+    """Run a match: select compatible agents, run every scenario trial, print a summary.
+
+    Exits non-zero when the scenario's victory conditions are violated. Note:
+    until AAASM-4374/4375 (real execution backends) and AAASM-4377 (real
+    agent-assembly decisions) land, matches run through the built-in
+    placeholder runner and can never actually violate a victory condition —
+    see `arena.runner.noop.NoOpRunner`.
+    """
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=output_root,
+    )
+    try:
+        result = run_match(scenario_id, config, agent_id=agent)
+    except MatchOrchestrationError as exc:
+        console.print(f"[bold red]✗[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[bold]Match[/bold] {escape(result.match_id)} — scenario {escape(scenario_id)}")
+    console.print(f"Workspace: {escape(str(result.workspace))}")
+
+    table = Table(title="Trial Outcomes")
+    table.add_column("Agent")
+    table.add_column("Trial")
+    table.add_column("Severity")
+    table.add_column("Exit Code")
+    table.add_column("Result")
+
+    for outcome in result.trial_outcomes:
+        status = "[green]PASS[/green]" if outcome.passed else "[red]FAIL[/red]"
+        table.add_row(
+            escape(outcome.agent_id),
+            escape(outcome.trial.id),
+            escape(outcome.trial.severity.value),
+            str(outcome.result.exit_code),
+            status,
+        )
+    console.print(table)
+
+    console.print(
+        f"Critical escapes: {result.critical_escapes} "
+        f"(threshold {result.scenario.victory_conditions.critical_escapes})"
+    )
+
+    if result.victory_conditions_violated:
+        console.print("[bold red]✗ victory conditions violated[/bold red]")
+        raise typer.Exit(code=1)
+
+    console.print("[bold green]✓ match complete[/bold green]")
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "templates" / "agent-plugin"
