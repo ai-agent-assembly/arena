@@ -253,3 +253,42 @@ def test_score_match_approval_bypass_is_tracked_without_alone_losing() -> None:
     assert score.approval_bypasses == 1
     assert score.unexpected_allows == 0
     assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_WINS
+
+
+# --- missing audit -------------------------------------------------------------------
+
+
+def test_score_match_missing_audit_fails_match_by_default() -> None:
+    trial = _trial(
+        id="happy-trial", expected={"some.action": Decision.ALLOW}, severity=Severity.LOW
+    )
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial, passed=False)],
+        critical_escapes=0,
+    )
+    audit_events = [_missing_decision_event(trial_id=trial.id, tool="some.other.action")]
+
+    score = score_match(match_result, scenario, audit_events)
+
+    assert score.missing_audits == 1
+    assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_LOSES
+
+
+def test_score_match_missing_audit_can_be_tolerated_when_configured() -> None:
+    trial = _trial(
+        id="happy-trial", expected={"some.action": Decision.ALLOW}, severity=Severity.LOW
+    )
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial, passed=False)],
+        critical_escapes=0,
+    )
+    audit_events = [_missing_decision_event(trial_id=trial.id, tool="some.other.action")]
+
+    score = score_match(match_result, scenario, audit_events, fail_on_missing_audit=False)
+
+    assert score.missing_audits == 1
+    assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_WINS
