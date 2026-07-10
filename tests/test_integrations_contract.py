@@ -32,6 +32,9 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+from pydantic import ValidationError
+
 from arena.integrations.adapter import FakeAgentAssemblyClient
 from arena.integrations.audit import (
     ArenaAuditEvent,
@@ -301,3 +304,87 @@ def test_missing_decision_audit_event_is_written_before_loop_continues(tmp_path:
     assert replayed[0].attempt.tool == "unlisted.action"
     assert replayed[0].decision is None
     assert replayed[0].severity is Severity.CRITICAL
+
+
+# --- 3. Unknown/invalid decision effect handling ------------------------------
+
+
+@pytest.mark.parametrize("invalid_effect", ["not-a-real-decision", "ALLOW", "", "allow ", None, 42])
+def test_defense_decision_rejects_unrecognized_effect(invalid_effect: object) -> None:
+    """`DefenseDecision.effect` is typed as `arena.models.scenario.Decision`,
+    a closed `str, Enum` — there is no code path anywhere in this pipeline
+    that constructs a `DefenseDecision` without going through Pydantic
+    validation (both `AgentAssemblyClient` implementations return
+    already-validated `DefenseDecision` instances, and `ArenaAuditEvent`
+    embeds the same model rather than a raw dict). That means an "unknown
+    decision effect" is not a runtime state this pipeline can ever reach in
+    memory: Pydantic's own enum validation is the enforcement mechanism, and
+    this test is exactly what proves it — every value that is not a real
+    `Decision` member (including a same-family-but-wrong-case string like
+    `"ALLOW"`, an empty string, trailing whitespace, `None`, and a non-string)
+    is rejected at construction time with a `ValidationError`, never silently
+    coerced or defaulted.
+    """
+    with pytest.raises(ValidationError):
+        DefenseDecision(
+            effect=invalid_effect,  # type: ignore[arg-type]
+            layer="policy",
+            reason="attempted construction with an invalid effect",
+            severity=Severity.LOW,
+        )
+
+
+def test_defense_decision_accepts_every_real_decision_effect() -> None:
+    # The converse of the above: every actual Decision member is accepted,
+    # so the rejection above is about validity, not over-eager rejection.
+    for effect in Decision:
+        decision = DefenseDecision(
+            effect=effect, layer="policy", reason="valid effect", severity=Severity.LOW
+        )
+        assert decision.effect is effect
+
+
+def test_arena_audit_event_rejects_invalid_effect_embedded_via_raw_json_replay(
+    tmp_path: Path,
+) -> None:
+    """Even a hand-crafted/corrupted `audit.jsonl` line with an invalid
+    `decision.effect` cannot be replayed into an `ArenaAuditEvent` — the
+    same Pydantic enforcement applies on the read path
+    (`ArenaAuditEvent.model_validate`), not just at construction time inside
+    `run_match`. This matters because `audit.jsonl` is a plain text file
+    that could in principle be edited or corrupted between being written and
+    being replayed/reported on.
+    """
+    path = tmp_path / "audit.jsonl"
+    corrupted_line = json.dumps(
+        {
+            "match_id": "match-1",
+            "attempt": {
+                "agent_id": "agent-a",
+                "framework": "raw-python",
+                "scenario_id": "contract-scenario",
+                "trial_id": "trial-a",
+                "tool": "some.tool",
+                "resource": "some/resource",
+                "args": {},
+                "context": None,
+                "timestamp": "2026-07-10T00:00:00Z",
+            },
+            "decision": {
+                "effect": "not-a-real-decision",
+                "layer": "policy",
+                "reason": "corrupted",
+                "policy_id": None,
+                "severity": "low",
+                "obligations": [],
+            },
+            "status": "decided",
+            "severity": "low",
+            "error": None,
+            "timestamp": "2026-07-10T00:00:00Z",
+        }
+    )
+    path.write_text(corrupted_line + "\n", encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        read_audit_events(path)
