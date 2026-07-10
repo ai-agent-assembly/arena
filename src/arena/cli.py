@@ -20,6 +20,7 @@ from arena.agents.cli import agents_app
 from arena.integrations.adapter import AdapterChoice, build_agent_assembly_client
 from arena.integrations.audit import read_audit_events
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
+from arena.reports.generate import generate_report
 from arena.reports.scoring import score_match
 from arena.runner.match import AUDIT_LOG_FILENAME, MatchConfig, MatchOrchestrationError, run_match
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
@@ -87,6 +88,12 @@ def run_command(
         "--output-root",
         help="Root directory under which each match's report workspace is created.",
     ),
+    reports_root: Path = typer.Option(
+        Path("reports/matches"),
+        "--reports-root",
+        help="Root directory under which the durable arena-report.md/arena-report.json/"
+        "audit.jsonl artifacts are written, as <reports-root>/<match-id>/.",
+    ),
     adapter: str = typer.Option(
         "fake",
         "--adapter",
@@ -120,6 +127,13 @@ def run_command(
     `agent-assembly wins`/`agent-assembly loses`, so this command reads
     that verdict instead of re-deriving a narrower (critical-escapes-only)
     one of its own.
+
+    After scoring, `arena.reports.generate.generate_report` (AAASM-4390)
+    writes the match's durable report artifacts — `arena-report.md`,
+    `arena-report.json`, `audit.jsonl` — under `<reports_root>/<match-id>/`
+    (default `reports/matches/`, distinct from `--output-root`'s ad-hoc
+    per-trial scratch workspace tree), and this command prints the report
+    directory path.
     """
     try:
         adapter_choice = AdapterChoice(adapter)
@@ -142,6 +156,7 @@ def run_command(
         official_root=official_root,
         community_root=community_root,
         output_root=output_root,
+        reports_root=reports_root,
         adapter=adapter_choice,
     )
     try:
@@ -191,6 +206,9 @@ def run_command(
     console.print(f"Missing audits: {score.missing_audits}")
     console.print(f"Agent runtime failures: {score.agent_runtime_failures}")
     console.print(f"Result: {escape(score.outcome.value)}")
+
+    report_dir = generate_report(result, score, audit_events, reports_root=reports_root)
+    console.print(f"Report: {escape(str(report_dir))}")
 
     if not score.victory:
         console.print("[bold red]✗ victory conditions violated[/bold red]")
