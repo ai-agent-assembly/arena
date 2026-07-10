@@ -41,6 +41,8 @@ Every match produces `arena-report.md` and `arena-report.json` (plus a raw `audi
 
 These are regenerated with `uv run python scripts/generate_report_samples.py` and asserted against by `tests/test_reports_snapshots.py` — see that module's docstring for the determinism strategy behind them.
 
+After each match, `aasm-arena run` also refreshes a small set of top-level static index files under `reports/` — `latest.json`/`latest.md` (the most recent match, in full) and `leaderboard.json` (a summary row per match) — so a website or docs site can fetch them directly without running Arena or standing up a backend service. See [`reports/README.md`](reports/README.md) for the full layout and schema.
+
 ## Submitting an agent
 
 At a high level, adding an agent to Arena means submitting a **manifest** — a YAML file describing how to build/run your agent, which framework it uses, and which scenarios it's eligible for — plus whatever plugin code the manifest points to. Submissions go through a public GitHub Issue Form and a PR, the same as any other contribution.
