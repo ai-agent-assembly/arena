@@ -18,8 +18,10 @@ from rich.table import Table
 
 from arena.agents.cli import agents_app
 from arena.integrations.adapter import AdapterChoice, build_agent_assembly_client
+from arena.integrations.audit import read_audit_events
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
-from arena.runner.match import MatchConfig, MatchOrchestrationError, run_match
+from arena.reports.scoring import score_match
+from arena.runner.match import AUDIT_LOG_FILENAME, MatchConfig, MatchOrchestrationError, run_match
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
 
 app = typer.Typer(
@@ -94,11 +96,12 @@ def run_command(
 ) -> None:
     """Run a match: select compatible agents, run every scenario trial, print a summary.
 
-    Exits non-zero when the scenario's victory conditions are violated.
-    Execution is real: `ProcessRunner` (AAASM-4374) actually launches
-    `command`-type agents as subprocesses, and `DockerRunner` (AAASM-4375)
-    actually launches `docker`-type agents in containers. Scoring is real
-    too (AAASM-4380): every attempted action is decided by the configured
+    Exits non-zero when `MatchScore.victory` is `False` (AAASM-4389's
+    `arena.reports.scoring.score_match` — see below). Execution is real:
+    `ProcessRunner` (AAASM-4374) actually launches `command`-type agents as
+    subprocesses, and `DockerRunner` (AAASM-4375) actually launches
+    `docker`-type agents in containers. Scoring is real too (AAASM-4380):
+    every attempted action is decided by the configured
     `AgentAssemblyClient` and `TrialOutcome.passed` is a real comparison
     against the trial's `expected` mapping, not a proxy — see the module
     docstring in `arena.runner.match` for exactly what "passed" means, and
@@ -109,6 +112,14 @@ def run_command(
     `arena.integrations.adapter`) the run uses to decide every attempted
     action; it's validated and stored on `MatchConfig.adapter`, then
     consumed by `run_match` for every trial.
+
+    The final verdict comes from `score_match(result, result.scenario,
+    read_audit_events(...))` rather than comparing
+    `result.critical_escapes` against its threshold inline — `score_match`
+    is the single source of truth for how every failure-mode count maps to
+    `agent-assembly wins`/`agent-assembly loses`, so this command reads
+    that verdict instead of re-deriving a narrower (critical-escapes-only)
+    one of its own.
     """
     try:
         adapter_choice = AdapterChoice(adapter)
@@ -160,12 +171,28 @@ def run_command(
         )
     console.print(table)
 
-    console.print(
-        f"Critical escapes: {result.critical_escapes} "
-        f"(threshold {result.scenario.victory_conditions.critical_escapes})"
-    )
+    audit_events = read_audit_events(result.workspace / AUDIT_LOG_FILENAME)
+    score = score_match(result, result.scenario, audit_events)
+    victory_conditions = result.scenario.victory_conditions
 
-    if result.victory_conditions_violated:
+    console.print(
+        f"Critical escapes: {score.critical_escapes} "
+        f"(threshold {victory_conditions.critical_escapes})"
+    )
+    console.print(
+        f"Unexpected allows: {score.unexpected_allows} "
+        f"(threshold {victory_conditions.unexpected_allows})"
+    )
+    console.print(
+        f"Secret exposures: {score.secret_exposures} "
+        f"(threshold {victory_conditions.secret_exposures})"
+    )
+    console.print(f"Approval bypasses: {score.approval_bypasses}")
+    console.print(f"Missing audits: {score.missing_audits}")
+    console.print(f"Agent runtime failures: {score.agent_runtime_failures}")
+    console.print(f"Result: {escape(score.outcome.value)}")
+
+    if not score.victory:
         console.print("[bold red]✗ victory conditions violated[/bold red]")
         raise typer.Exit(code=1)
 
