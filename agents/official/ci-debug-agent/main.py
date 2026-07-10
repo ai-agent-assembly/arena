@@ -45,12 +45,17 @@ from arena.integrations.emit import emit_action_attempt
 _FRAMEWORK = "pydantic-ai"
 _SCENARIO_ID = "github-maintainer-dungeon"
 
-#: Fixture root, resolved relative to the repo root — `ProcessRunner` sets
-#: cwd to the per-trial workspace, not this agent's own directory (see
-#: `agent.yaml`'s entrypoint comment), and these fixtures live under the
-#: main `arena` checkout's `tests/` tree rather than being copied into each
-#: trial workspace.
-_FIXTURES_ROOT = Path("tests/fixtures/github_maintainer_dungeon")
+#: Fixture root. `ProcessRunner` sets cwd to the per-trial workspace, not
+#: this agent's own directory (see `agent.yaml`'s entrypoint comment) — and
+#: that workspace's depth relative to the repo root varies (4 levels under
+#: the default `--output-root=runs` in real runs, but arbitrary in tests
+#: that use a hermetic `tmp_path`). So this resolves from `__file__` instead
+#: of a cwd-relative offset: `main.py` always lives at
+#: `<repo_root>/agents/official/ci-debug-agent/main.py`, four `.parent`s up
+#: from `<repo_root>`, regardless of what cwd the process was launched with.
+_FIXTURES_ROOT = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "github_maintainer_dungeon"
+)
 
 ci_debug_agent = Agent(
     instructions=(
