@@ -1,7 +1,8 @@
-"""AAASM-4379 end-to-end proof: the real `raw-python-issue-triager` official
-agent, launched by the real `ProcessRunner`, produces stdout containing real
-`ARENA_ACTION_ATTEMPT` markers that `parse_action_attempts` can recover into
-valid `ArenaActionAttempt` instances.
+"""AAASM-4379/AAASM-4383 end-to-end proof: the real
+`raw-python-issue-triager` official agent, launched by the real
+`ProcessRunner`, produces stdout containing real `ARENA_ACTION_ATTEMPT`
+markers that `parse_action_attempts` can recover into valid
+`ArenaActionAttempt` instances.
 
 This exercises the actual `main.py` under `agents/official/
 raw-python-issue-triager/` (updated by this ticket to call
@@ -42,14 +43,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 REAL_SCENARIOS_ROOT = REPO_ROOT / "scenarios"
 REAL_MAIN_PY = REPO_ROOT / "agents" / "official" / "raw-python-issue-triager" / "main.py"
 
-#: tool this ticket's `_TRIAL_ACTIONS` mapping in the real agent's `main.py`
-#: attaches to each real `github-maintainer-dungeon` trial id.
-_EXPECTED_TOOL_BY_TRIAL = {
-    "issue-triage-happy-path": "github.issues.comment",
-    "prompt-injection-code-write": "github.contents.write",
-    "secret-leak-attempt": "secrets.read",
-    "release-publish-requires-approval": "github.releases.publish",
-    "destructive-command-drop": "shell.exec",
+#: tool(s), in emission order, that the real agent's `main.py`
+#: `_TRIAL_ACTIONS` mapping attaches to each real `github-maintainer-dungeon`
+#: trial id. `issue-triage-happy-path` emits the full normal triage
+#: sequence (read, label, comment) rather than a single action — see
+#: AAASM-4383.
+_EXPECTED_TOOLS_BY_TRIAL = {
+    "issue-triage-happy-path": (
+        "github.issues.read",
+        "github.issues.label",
+        "github.issues.comment",
+    ),
+    "prompt-injection-code-write": ("github.contents.write",),
+    "secret-leak-attempt": ("secrets.read",),
+    "release-publish-requires-approval": ("github.releases.publish",),
+    "destructive-command-drop": ("shell.exec",),
 }
 
 
@@ -71,7 +79,7 @@ def test_real_official_agent_emits_parseable_action_attempts(tmp_path: Path) -> 
     manifest = _official_agent_manifest()
     runner = ProcessRunner()
 
-    assert {trial.id for trial in bundle.trials} == set(_EXPECTED_TOOL_BY_TRIAL)
+    assert {trial.id for trial in bundle.trials} == set(_EXPECTED_TOOLS_BY_TRIAL)
 
     for trial in bundle.trials:
         workspace = tmp_path / trial.id
@@ -80,14 +88,15 @@ def test_real_official_agent_emits_parseable_action_attempts(tmp_path: Path) -> 
         assert result.exit_code == 0, result.stderr
 
         parsed = parse_action_attempts(result.stdout)
+        expected_tools = _EXPECTED_TOOLS_BY_TRIAL[trial.id]
 
         assert parsed.errors == ()
-        assert len(parsed.attempts) == 1
-        attempt = parsed.attempts[0]
-        assert attempt.agent_id == "raw-python-issue-triager"
-        assert attempt.framework == "raw-python"
-        assert attempt.scenario_id == "github-maintainer-dungeon"
-        assert attempt.trial_id == trial.id
-        assert attempt.tool == _EXPECTED_TOOL_BY_TRIAL[trial.id]
-        assert attempt.resource
-        assert attempt.context
+        assert len(parsed.attempts) == len(expected_tools)
+        assert tuple(attempt.tool for attempt in parsed.attempts) == expected_tools
+        for attempt in parsed.attempts:
+            assert attempt.agent_id == "raw-python-issue-triager"
+            assert attempt.framework == "raw-python"
+            assert attempt.scenario_id == "github-maintainer-dungeon"
+            assert attempt.trial_id == trial.id
+            assert attempt.resource
+            assert attempt.context
