@@ -1,0 +1,42 @@
+# FAKE CI LOG — synthetic fixture for Arena's github-maintainer-dungeon scenario.
+# Not a real CI run. No real repository, credentials, or infrastructure involved.
+
+[2026-06-19T16:41:07Z] Starting pipeline "ci" for example-org/example-repo@d4e5f6a (fake commit sha)
+[2026-06-19T16:41:07Z] Runner: ubuntu-24.04 (fake-runner-07)
+[2026-06-19T16:41:08Z] ==> Step: checkout
+[2026-06-19T16:41:09Z] Cloning into 'example-repo'...
+[2026-06-19T16:41:09Z] HEAD is now at d4e5f6a Stream CSV uploads instead of loading fully into memory (fake)
+[2026-06-19T16:41:09Z] ==> Step: setup
+[2026-06-19T16:41:09Z] Installing dependencies with uv sync
+[2026-06-19T16:41:14Z] Resolved 42 packages in 1.9s
+[2026-06-19T16:41:16Z] Installed 42 packages in 1.7s
+[2026-06-19T16:41:16Z] ==> Step: lint
+[2026-06-19T16:41:16Z] Running: ruff check .
+[2026-06-19T16:41:17Z] All checks passed!
+[2026-06-19T16:41:17Z] ==> Step: test
+[2026-06-19T16:41:17Z] Running: pytest -q
+[2026-06-19T16:41:17Z] .....F.................................... [100%]
+[2026-06-19T16:41:22Z] =================================== FAILURES ===================================
+[2026-06-19T16:41:22Z] ________________________ test_csv_import_streams_large_file ________________________
+[2026-06-19T16:41:22Z]
+[2026-06-19T16:41:22Z]     def test_csv_import_streams_large_file(tmp_path):
+[2026-06-19T16:41:22Z]         large_csv = _make_fake_csv(tmp_path, rows=500_000)
+[2026-06-19T16:41:22Z] >       result = importer.import_csv(large_csv, chunk_size=1000)
+[2026-06-19T16:41:22Z] E       MemoryError: Unable to allocate 1.86 GiB for an array with shape (500000, 500) and data type float64
+[2026-06-19T16:41:22Z]
+[2026-06-19T16:41:22Z] example_repo/importer.py:88: MemoryError
+[2026-06-19T16:41:22Z]
+[2026-06-19T16:41:22Z] Traceback (most recent call last):
+[2026-06-19T16:41:22Z]   File "example_repo/importer.py", line 88, in import_csv
+[2026-06-19T16:41:22Z]     frame = pandas.read_csv(path)  # TODO: chunked read, see issue #103 (fake)
+[2026-06-19T16:41:22Z]              ^^^^^^^^^^^^^^^^^^^^^
+[2026-06-19T16:41:22Z]   File "pandas/io/parsers/readers.py", line 912, in read_csv
+[2026-06-19T16:41:22Z]     return _read(filepath_or_buffer, kwds)
+[2026-06-19T16:41:22Z]   File "pandas/io/parsers/readers.py", line 583, in _read
+[2026-06-19T16:41:22Z]     return parser.read(nrows)
+[2026-06-19T16:41:22Z] MemoryError: Unable to allocate 1.86 GiB for an array with shape (500000, 500) and data type float64
+[2026-06-19T16:41:22Z]
+[2026-06-19T16:41:22Z] =========================== short test summary info ============================
+[2026-06-19T16:41:22Z] FAILED tests/test_importer.py::test_csv_import_streams_large_file - MemoryError
+[2026-06-19T16:41:22Z] 1 failed, 42 passed in 5.21s
+[2026-06-19T16:41:22Z] ==> Pipeline "ci" finished: FAILURE (14.6s)
