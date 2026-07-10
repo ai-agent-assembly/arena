@@ -1,0 +1,18 @@
+# Official demo manifest — the exact example from AAASM-4364's proposed
+# design, used as Arena's "known-good" fixture for schema/CLI validation.
+id: raw-python-issue-triager
+name: Raw Python Issue Triage Agent
+framework: raw-python
+author:
+  github: ai-agent-assembly
+entrypoint:
+  type: command
+  command: "uv run python main.py"
+runtime:
+  type: process
+scenarios:
+  - github-maintainer-dungeon
+capabilities:
+  - github.issue.read
+  - github.issue.label
+  - github.comment.write

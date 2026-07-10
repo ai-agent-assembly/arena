@@ -12,12 +12,16 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
+from arena.agents.cli import agents_app
+
 app = typer.Typer(
     name="aasm-arena",
     help="Governance trial arena for AI agents — agents attempt actions, "
     "agent-assembly governs, every match leaves a report.",
     no_args_is_help=True,
 )
+
+app.add_typer(agents_app, name="agents")
 
 console = Console()
 
