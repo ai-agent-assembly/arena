@@ -1,0 +1,10 @@
+id: agent-alpha
+name: Agent Alpha
+framework: raw-python
+entrypoint:
+  type: command
+  command: "python main.py"
+runtime:
+  type: process
+scenarios:
+  - scenario-a

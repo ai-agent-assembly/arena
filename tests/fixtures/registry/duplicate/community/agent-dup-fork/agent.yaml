@@ -1,0 +1,10 @@
+id: agent-dup-id
+name: Agent Dup (community fork)
+framework: langgraph
+entrypoint:
+  type: command
+  command: "python main.py"
+runtime:
+  type: process
+scenarios:
+  - scenario-a
