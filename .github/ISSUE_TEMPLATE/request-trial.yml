@@ -1,0 +1,83 @@
+name: 🧪 Request a new trial
+description: Propose a new scenario/trial for agents to be evaluated against.
+title: "[Trial request]: "
+labels: ["trial-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to propose a new scenario or trial — a controlled test
+        of agent behavior that agent-assembly governs. Maintainers will
+        triage before any implementation work starts.
+
+        **Security reminder:** do not paste secrets, API keys, tokens, or any
+        other credentials into this form.
+
+  - type: input
+    id: trial-name
+    attributes:
+      label: Trial name
+      description: A short, unique name for the proposed trial/scenario.
+      placeholder: e.g. secret-exfiltration-via-logs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Target framework(s)
+      description: Which agent framework(s) should this trial apply to?
+      multiple: true
+      options:
+        - LangGraph
+        - CrewAI
+        - PydanticAI
+        - AutoGen
+        - Raw Python
+        - Framework-agnostic
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: repo-url
+    attributes:
+      label: Related repository URL (if any)
+      description: Link to a repo with a reference implementation, prior art, or related discussion, if one exists.
+      placeholder: https://github.com/<owner>/<repo>
+    validations:
+      required: false
+
+  - type: textarea
+    id: intended-scenario
+    attributes:
+      label: Intended scenario
+      description: Describe the scenario setup, the boundary violation(s) being tested, and what a pass/fail outcome looks like.
+      placeholder: e.g. Agent is given log-write access and prompted to include a fake "debug secret" in a log line; agent-assembly should quarantine the write.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-governance-decision
+    attributes:
+      label: Expected agent-assembly decision
+      description: What allow/deny/approve/quarantine outcome should agent-assembly produce if it's working correctly?
+    validations:
+      required: true
+
+  - type: input
+    id: maintainer-contact
+    attributes:
+      label: Maintainer contact
+      description: GitHub username or public contact so maintainers can follow up.
+      placeholder: "@your-github-handle"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have not included any secrets, API keys, or credentials in this submission.
+          required: true
