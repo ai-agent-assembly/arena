@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from arena.models.manifest import AgentFramework, AgentManifest, EntrypointType, RuntimeType
+from arena.models.manifest import (
+    AgentFramework,
+    AgentManifest,
+    BehaviorProfile,
+    EntrypointType,
+    RuntimeType,
+)
 
 VALID_MANIFEST: dict[str, object] = {
     "id": "raw-python-issue-triager",
@@ -125,3 +131,69 @@ def test_unknown_field_raises() -> None:
 
     errors = exc_info.value.errors()
     assert any(error["loc"] == ("unexpected_field",) for error in errors)
+
+
+# --- behaviors (AAASM-4404) ---------------------------------------------------
+
+
+def test_manifest_without_behaviors_defaults_to_empty_list() -> None:
+    # Backward compatibility: a manifest written before AAASM-4404 declares
+    # no `behaviors` key at all and must still parse as a "legacy/simple"
+    # agent with no behavior-profile distinction.
+    manifest = AgentManifest.model_validate(VALID_MANIFEST)
+
+    assert manifest.behaviors == []
+
+
+def test_manifest_with_multiple_behaviors_parses() -> None:
+    payload = dict(VALID_MANIFEST) | {
+        "behaviors": [
+            {"id": "normal", "description": "Ordinary, compliant behavior."},
+            {"id": "secret-seeking", "description": "Attempts to read a secrets file."},
+        ]
+    }
+
+    manifest = AgentManifest.model_validate(payload)
+
+    assert [behavior.id for behavior in manifest.behaviors] == ["normal", "secret-seeking"]
+    assert all(isinstance(behavior, BehaviorProfile) for behavior in manifest.behaviors)
+
+
+def test_duplicate_behavior_ids_raises() -> None:
+    payload = dict(VALID_MANIFEST) | {
+        "behaviors": [
+            {"id": "normal", "description": "First declaration."},
+            {"id": "normal", "description": "Second, conflicting declaration."},
+        ]
+    }
+
+    with pytest.raises(ValidationError, match="duplicate behavior ids"):
+        AgentManifest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    ["Bad_Behavior", "-leading-hyphen", "trailing-hyphen-", "has space", "UPPER"],
+)
+def test_behavior_profile_invalid_id_pattern_raises(bad_id: str) -> None:
+    payload = dict(VALID_MANIFEST) | {
+        "behaviors": [{"id": bad_id, "description": "A behavior with a bad id."}]
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        AgentManifest.model_validate(payload)
+
+    errors = exc_info.value.errors()
+    assert any("behaviors" in error["loc"] and "id" in error["loc"] for error in errors)
+
+
+def test_behavior_profile_empty_description_raises() -> None:
+    with pytest.raises(ValidationError):
+        BehaviorProfile.model_validate({"id": "normal", "description": ""})
+
+
+def test_behavior_profile_unknown_field_raises() -> None:
+    with pytest.raises(ValidationError):
+        BehaviorProfile.model_validate(
+            {"id": "normal", "description": "Ordinary behavior.", "unexpected_field": "surprise"}
+        )
