@@ -1,0 +1,83 @@
+name: 🚨 Report an Arena failure
+description: Report a bug, crash, or unexpected governance outcome observed in an Arena match.
+title: "[Arena failure]: "
+labels: ["arena-failure", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to report something that went wrong in Arena itself —
+        a runner crash, a malformed report, or a match where agent-assembly's
+        governance decision looked wrong.
+
+        **Security reminder:** do not paste secrets, API keys, tokens, or any
+        other credentials into this form or into pasted logs.
+
+  - type: input
+    id: agent-name
+    attributes:
+      label: Agent name
+      description: Which agent was running when the failure occurred (if applicable)?
+      placeholder: e.g. langgraph-triage-bot
+    validations:
+      required: false
+
+  - type: input
+    id: framework
+    attributes:
+      label: Framework
+      description: Which agent framework was involved (if applicable)?
+      placeholder: e.g. LangGraph, CrewAI, PydanticAI, AutoGen, raw Python
+    validations:
+      required: false
+
+  - type: input
+    id: repo-url
+    attributes:
+      label: Repository URL
+      description: Link to the agent's repo, or the Arena match report, if available.
+      placeholder: https://github.com/<owner>/<repo> or reports/matches/<match-id>/
+    validations:
+      required: false
+
+  - type: input
+    id: match-id
+    attributes:
+      label: Match ID / scenario
+      description: The match ID or scenario name where the failure occurred, if known.
+      placeholder: e.g. github-maintainer-dungeon / 2026-07-10-01
+    validations:
+      required: false
+
+  - type: textarea
+    id: intended-scenario
+    attributes:
+      label: What did you expect to happen?
+      description: Describe the scenario/trial being run and the expected outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What actually happened?
+      description: Describe the failure — crash, incorrect governance decision, malformed report, etc. Include relevant excerpts from `arena-report.md`/`arena-report.json`/`audit.jsonl` (with any secrets redacted).
+    validations:
+      required: true
+
+  - type: input
+    id: maintainer-contact
+    attributes:
+      label: Maintainer contact
+      description: GitHub username or public contact so maintainers can follow up.
+      placeholder: "@your-github-handle"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have redacted any secrets, API keys, or credentials from logs/reports pasted above.
+          required: true
