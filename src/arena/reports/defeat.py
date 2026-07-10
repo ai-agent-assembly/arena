@@ -355,3 +355,47 @@ def load_defeat_routing_config(
         raise DefeatRoutingConfigLoadError(
             f"{path}: invalid defeat routing config — {exc}"
         ) from exc
+
+
+class DefeatRouting(BaseModel):
+    """Where one `DefeatClassification` should be routed, ready for a future
+    subtask to actually file it as a GitHub issue — this module only ever
+    produces this structured decision, never calls the GitHub API itself.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    category: DefeatCategory
+    repo: str
+    labels: tuple[str, ...]
+    title_prefix: str
+    severity: Severity
+    detail: str
+    trial_id: str | None = None
+    agent_id: str | None = None
+
+
+def route_defeat(
+    classification: DefeatClassification, routing_config: DefeatRoutingConfig
+) -> DefeatRouting:
+    """Look `classification.category` up in `routing_config` and return the
+    structured routing decision for it.
+
+    Config lookup and restructuring only — see the module docstring for why
+    creating the actual GitHub issue is out of this subtask's scope.
+    `DefeatRoutingConfig._covers_every_category` guarantees every
+    `DefeatCategory` has an entry, so this never raises `KeyError` for a
+    `classification` built by `classify_defeats` (or any other valid
+    `DefeatCategory` value).
+    """
+    entry = routing_config.defeat_routing[classification.category]
+    return DefeatRouting(
+        category=classification.category,
+        repo=entry.repo,
+        labels=entry.labels,
+        title_prefix=entry.title_prefix,
+        severity=entry.severity,
+        detail=classification.detail,
+        trial_id=classification.trial_id,
+        agent_id=classification.agent_id,
+    )
