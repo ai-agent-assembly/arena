@@ -35,12 +35,17 @@ import json
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from arena.integrations.decision import DefenseDecision
 from arena.integrations.models import ArenaActionAttempt
-from arena.models.scenario import Severity
+from arena.models.scenario import Decision, Severity
+
+#: Marker written in place of a redacted arg value at JSONL persistence
+#: time. See `_persisted_payload`'s docstring.
+REDACTION_MARKER = "<redacted>"
 
 
 class AuditEventStatus(str, Enum):
@@ -147,6 +152,31 @@ class ArenaAuditEvent(BaseModel):
         )
 
 
+def _persisted_payload(event: ArenaAuditEvent) -> dict[str, Any]:
+    """`event` as a JSON-safe dict, with `attempt.args` redacted when the
+    decision calls for it.
+
+    Redaction happens only here, at the point of JSONL persistence — the
+    in-memory `event.attempt.args` is never mutated, so a caller that wants
+    unredacted args for something like immediate CLI display still has them
+    untouched. When `decision.effect` is `Decision.REDACT`, every value in
+    the *persisted copy* of `attempt.args` is replaced with
+    `REDACTION_MARKER`. `effect == Decision.REDACT` is the clearest
+    available signal for "this action's args should not be persisted
+    verbatim" — `DefenseDecision.obligations` is free-text (`list[str]`,
+    see its own docstring), not a structured field a caller can safely
+    pattern-match on, so it is not used as a redaction trigger here.
+    """
+    payload = event.model_dump(mode="json")
+    if (
+        event.attempt is not None
+        and event.decision is not None
+        and event.decision.effect is Decision.REDACT
+    ):
+        payload["attempt"]["args"] = dict.fromkeys(event.attempt.args, REDACTION_MARKER)
+    return payload
+
+
 def append_audit_event(path: Path, event: ArenaAuditEvent) -> None:
     """Append `event` as one JSON line to the JSONL audit log at `path`.
 
@@ -157,7 +187,7 @@ def append_audit_event(path: Path, event: ArenaAuditEvent) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(event.model_dump(mode="json")) + "\n")
+        handle.write(json.dumps(_persisted_payload(event)) + "\n")
 
 
 def read_audit_events(path: Path) -> list[ArenaAuditEvent]:
