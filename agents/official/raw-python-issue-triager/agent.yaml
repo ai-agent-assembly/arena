@@ -8,8 +8,17 @@ framework: raw-python
 author:
   github: ai-agent-assembly
 entrypoint:
+  # `ProcessRunner` launches this with cwd set to the per-trial workspace,
+  # not this agent's own directory (see `arena.runner.process`'s
+  # "Working directory" docstring section — the `Runner.run` signature has
+  # no path field, so a command can't be handed its own directory). AAASM-
+  # 4376 fixed the previously-missing main.py alongside this relative
+  # "../../../.." offset back to the repo root (output_root/match_id/
+  # agent_id/trial_id is always 4 path segments deep under the default
+  # `--output-root=runs`, invoked from the repo root — see
+  # docs/local-execution.md for the exact assumption and its limits).
   type: command
-  command: "uv run python main.py"
+  command: "uv run python ../../../../agents/official/raw-python-issue-triager/main.py"
 runtime:
   type: process
 scenarios:
