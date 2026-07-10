@@ -27,6 +27,7 @@ from arena.runner.process import ProcessRunner
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "process_runner"
 ECHO_CONTEXT_SCRIPT = FIXTURES_DIR / "echo_context.py"
+SLEEP_FOREVER_SCRIPT = FIXTURES_DIR / "sleep_forever.py"
 
 _TRIAL = TrialSpec(
     id="example-trial",
@@ -87,3 +88,19 @@ def test_process_runner_merges_manifest_declared_env(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "manifest_env=from-manifest" in result.stdout
+
+
+def test_process_runner_enforces_timeout_without_raising(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    command = f"{shlex.quote(sys.executable)} {shlex.quote(str(SLEEP_FOREVER_SCRIPT))}"
+    manifest = _manifest(command)
+    runner = ProcessRunner(timeout_seconds=0.5)
+
+    result = runner.run(manifest, _TRIAL, workspace=workspace)
+
+    assert result.exit_code != 0
+    assert "timed out" in result.stderr
+    assert "0.5" in result.stderr
+    # A generous upper bound so this stays reliable under CI load, while
+    # still proving the runner didn't just wait out the 60s sleep.
+    assert result.duration_seconds < 30.0
