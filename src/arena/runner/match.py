@@ -69,6 +69,14 @@ class MatchOrchestrationError(Exception):
     """
 
 
+#: Filename (relative to a match's `workspace`) `run_match` writes its
+#: append-only JSONL audit log to. Exposed as a constant (AAASM-4389) so
+#: callers that need to re-read a completed match's audit trail — the CLI's
+#: `arena.reports.scoring.score_match` wiring, for one — don't hardcode the
+#: same literal a second time.
+AUDIT_LOG_FILENAME = "audit.jsonl"
+
+
 @dataclass(frozen=True)
 class RunnerRegistry:
     """Maps an agent's `EntrypointType` to the `Runner` that executes it.
@@ -373,7 +381,7 @@ def run_match(
     #: its own `attempt.agent_id`/`attempt.trial_id`, so a reader that wants
     #: only one trial's events can still filter a single file trivially,
     #: while "replay this whole match" stays a one-file operation.
-    audit_path = workspace / "audit.jsonl"
+    audit_path = workspace / AUDIT_LOG_FILENAME
 
     events: list[MatchEvent] = [
         MatchEvent(
