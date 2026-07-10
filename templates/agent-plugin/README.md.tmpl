@@ -1,0 +1,34 @@
+# __AGENT_NAME__
+
+Scaffolded via `aasm-arena scaffold-agent --id __AGENT_ID__ --framework __FRAMEWORK__`.
+
+## Structure
+
+- `agent.yaml` — the agent plugin manifest (see `docs/architecture.md` in the
+  `arena` repo for the full manifest contract). Update the `scenarios` list
+  with a real scenario id before submitting.
+- `main.py` — entrypoint stub invoked by the manifest's `entrypoint.command`.
+
+## Running locally
+
+```bash
+cd __AGENT_ID__
+uv venv
+uv pip install -r requirements.txt  # add your framework's dependencies here
+uv run python main.py
+```
+
+## Validating the manifest
+
+From the `arena` repo root:
+
+```bash
+uv run aasm-arena agents validate __AGENT_ID__/agent.yaml
+```
+
+## Next steps
+
+1. Implement your agent logic in `main.py`.
+2. Point `scenarios` in `agent.yaml` at a real scenario id under this repo's
+   `scenarios/` directory.
+3. Fill in `capabilities` with the governance capabilities your agent needs.
