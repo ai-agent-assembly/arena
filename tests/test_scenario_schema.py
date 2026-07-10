@@ -118,6 +118,32 @@ class TestTrialSpec:
 
         assert trial.expected["some.action"] is decision
 
+    # --- behavior_id (AAASM-4404) ---------------------------------------
+
+    def test_behavior_id_defaults_to_none(self) -> None:
+        # Backward compatibility: trials authored before AAASM-4404 don't
+        # declare behavior_id at all and must still parse unchanged.
+        trial = TrialSpec.model_validate(_valid_trial_kwargs())
+
+        assert trial.behavior_id is None
+
+    def test_behavior_id_set_parses(self) -> None:
+        kwargs = _valid_trial_kwargs() | {"behavior_id": "prompt-injection-vulnerable"}
+
+        trial = TrialSpec.model_validate(kwargs)
+
+        assert trial.behavior_id == "prompt-injection-vulnerable"
+
+    @pytest.mark.parametrize(
+        "bad_behavior_id",
+        ["Bad_Behavior", "-leading-hyphen", "trailing-hyphen-", "has space", "UPPER"],
+    )
+    def test_invalid_behavior_id_pattern_is_rejected(self, bad_behavior_id: str) -> None:
+        kwargs = _valid_trial_kwargs() | {"behavior_id": bad_behavior_id}
+
+        with pytest.raises(ValidationError):
+            TrialSpec.model_validate(kwargs)
+
 
 class TestVictoryConditions:
     def test_defaults_are_zero(self) -> None:

@@ -187,6 +187,107 @@ def test_run_match_no_compatible_agents_raises(match_config: MatchConfig, tmp_pa
         run_match("lonely-scenario", match_config)
 
 
+# --- run_match: behavior_id cross-referential validation (AAASM-4404) --------
+
+
+def test_run_match_unsupported_trial_behavior_id_raises(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+
+    scenario_dir = scenarios_root / "behavior-scenario"
+    trials_dir = scenario_dir / "trials"
+    trials_dir.mkdir(parents=True)
+    (scenario_dir / "scenario.yaml").write_text(
+        "id: behavior-scenario\n"
+        "name: Behavior Scenario\n"
+        "description: Scenario used for behavior_id cross-referential tests.\n"
+        "trials:\n"
+        "  - behavior-trial\n"
+    )
+    (trials_dir / "behavior-trial.yaml").write_text(
+        "id: behavior-trial\n"
+        "description: A trial that targets a specific behavior profile.\n"
+        "expected:\n"
+        "  some.action: deny\n"
+        "severity: high\n"
+        "behavior_id: secret-seeking\n"
+    )
+    # This agent is compatible with the scenario but declares no behaviors
+    # at all, so "secret-seeking" can never be satisfied.
+    _write_agent(official_root, "agent-one", ["behavior-scenario"])
+
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=tmp_path / "runs",
+    )
+
+    with pytest.raises(MatchOrchestrationError, match="secret-seeking") as exc_info:
+        run_match("behavior-scenario", config)
+
+    message = str(exc_info.value)
+    assert "behavior-trial" in message
+    assert "agent-one" in message
+
+
+def test_run_match_supported_trial_behavior_id_does_not_raise(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+
+    scenario_dir = scenarios_root / "behavior-scenario"
+    trials_dir = scenario_dir / "trials"
+    trials_dir.mkdir(parents=True)
+    (scenario_dir / "scenario.yaml").write_text(
+        "id: behavior-scenario\n"
+        "name: Behavior Scenario\n"
+        "description: Scenario used for behavior_id cross-referential tests.\n"
+        "trials:\n"
+        "  - behavior-trial\n"
+    )
+    (trials_dir / "behavior-trial.yaml").write_text(
+        "id: behavior-trial\n"
+        "description: A trial that targets a specific behavior profile.\n"
+        "expected:\n"
+        "  some.action: deny\n"
+        "severity: high\n"
+        "behavior_id: secret-seeking\n"
+    )
+    agent_dir = official_root / "agent-one"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "agent.yaml").write_text(
+        "id: agent-one\n"
+        "name: Agent One\n"
+        "framework: raw-python\n"
+        'entrypoint:\n  type: command\n  command: "python main.py"\n'
+        "runtime:\n"
+        "  type: process\n"
+        "scenarios:\n"
+        "  - behavior-scenario\n"
+        "behaviors:\n"
+        "  - id: secret-seeking\n"
+        "    description: Attempts to read a secrets file.\n"
+    )
+
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=tmp_path / "runs",
+    )
+
+    # No MatchOrchestrationError: agent-one declares the "secret-seeking"
+    # behavior the trial references, so run_match proceeds past the
+    # behavior_id validation step (into the real — and here failing, since
+    # "python main.py" doesn't exist — process launch, which is a separate
+    # concern this test doesn't assert on).
+    result = run_match("behavior-scenario", config)
+
+    assert result.trial_outcomes[0].trial.behavior_id == "secret-seeking"
+
+
 # --- run_match: happy path ----------------------------------------------------
 
 

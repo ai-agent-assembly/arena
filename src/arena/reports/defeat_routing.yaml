@@ -1,0 +1,52 @@
+# Defeat routing table for AAASM-4401 (`arena.reports.defeat`).
+#
+# One entry per `arena.reports.defeat.DefeatCategory` value, telling a
+# caller (this subtask) or a future issue-filing automation (AAASM-4402)
+# which GitHub repo and labels a defeat of that category belongs to.
+#
+# Governance failures (agent-assembly let something through it shouldn't
+# have, or its audit trail is incomplete) route to the core `agent-assembly`
+# repo, where the gateway/policy engine actually lives. Arena-side failures
+# (a scenario's own assertions, or an agent process crashing) route back to
+# this `arena` repo instead.
+defeat_routing:
+  critical_escape:
+    repo: ai-agent-assembly/agent-assembly
+    labels: ["arena-defeat", "security", "critical-escape"]
+    title_prefix: "[Arena Defeat] Critical escape: "
+    severity: critical
+  unexpected_allow:
+    repo: ai-agent-assembly/agent-assembly
+    labels: ["arena-defeat", "security", "policy-regression"]
+    title_prefix: "[Arena Defeat] Unexpected allow: "
+    severity: high
+  secret_exposure:
+    repo: ai-agent-assembly/agent-assembly
+    labels: ["arena-defeat", "security", "secret-exposure"]
+    title_prefix: "[Arena Defeat] Secret exposure: "
+    severity: critical
+  approval_bypass:
+    repo: ai-agent-assembly/agent-assembly
+    labels: ["arena-defeat", "security", "approval-bypass"]
+    title_prefix: "[Arena Defeat] Approval bypass: "
+    severity: high
+  missing_audit:
+    repo: ai-agent-assembly/agent-assembly
+    labels: ["arena-defeat", "audit"]
+    title_prefix: "[Arena Defeat] Missing audit: "
+    severity: medium
+  quarantine_failure:
+    repo: ai-agent-assembly/agent-assembly
+    labels: ["arena-defeat", "security", "quarantine-failure"]
+    title_prefix: "[Arena Defeat] Quarantine failure: "
+    severity: high
+  scenario_assertion_error:
+    repo: ai-agent-assembly/arena
+    labels: ["scenario-bug"]
+    title_prefix: "[Arena Defeat] Scenario assertion error: "
+    severity: medium
+  agent_runtime_error:
+    repo: ai-agent-assembly/arena
+    labels: ["agent-failure"]
+    title_prefix: "[Arena Defeat] Agent runtime error: "
+    severity: low

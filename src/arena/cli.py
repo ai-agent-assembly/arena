@@ -21,6 +21,7 @@ from arena.integrations.adapter import AdapterChoice, build_agent_assembly_clien
 from arena.integrations.audit import read_audit_events
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
 from arena.reports.generate import generate_report
+from arena.reports.index import refresh_static_index
 from arena.reports.scoring import score_match
 from arena.runner.match import AUDIT_LOG_FILENAME, MatchConfig, MatchOrchestrationError, run_match
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
@@ -133,7 +134,10 @@ def run_command(
     `arena-report.json`, `audit.jsonl` — under `<reports_root>/<match-id>/`
     (default `reports/matches/`, distinct from `--output-root`'s ad-hoc
     per-trial scratch workspace tree), and this command prints the report
-    directory path.
+    directory path. `arena.reports.index.refresh_static_index` (AAASM-4397)
+    then rebuilds `<reports_root's parent>/latest.json`, `latest.md`, and
+    `leaderboard.json` from every match report on disk, so a website/docs
+    consumer always has an up-to-date static index after each run.
     """
     try:
         adapter_choice = AdapterChoice(adapter)
@@ -209,6 +213,9 @@ def run_command(
 
     report_dir = generate_report(result, score, audit_events, reports_root=reports_root)
     console.print(f"Report: {escape(str(report_dir))}")
+
+    refresh_static_index(reports_root)
+    console.print(f"Static index: {escape(str(reports_root.parent))}")
 
     if not score.victory:
         console.print("[bold red]✗ victory conditions violated[/bold red]")

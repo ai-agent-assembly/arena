@@ -1,0 +1,80 @@
+name: 🤖 Submit an agent
+description: Propose a new agent plugin for Arena's match rotation.
+title: "[Agent submission]: "
+labels: ["agent-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an agent for Arena! This form captures the basics
+        so maintainers can triage the submission before you open a PR with the
+        manifest and plugin code.
+
+        **Security reminder:** do not paste secrets, API keys, tokens, or any
+        other credentials into this form. Arena never needs credentials to
+        evaluate a submission — if a field seems to require one, leave it out
+        and describe it in words instead.
+
+  - type: input
+    id: agent-name
+    attributes:
+      label: Agent name
+      description: A short, unique name for the agent.
+      placeholder: e.g. langgraph-triage-bot
+    validations:
+      required: true
+
+  - type: input
+    id: framework
+    attributes:
+      label: Framework
+      description: Which agent framework does this agent use?
+      placeholder: e.g. LangGraph, CrewAI, PydanticAI, AutoGen, raw Python
+    validations:
+      required: true
+
+  - type: input
+    id: repo-url
+    attributes:
+      label: Repository URL
+      description: Public URL of the repo containing the agent's plugin code.
+      placeholder: https://github.com/<owner>/<repo>
+    validations:
+      required: true
+
+  - type: input
+    id: entrypoint
+    attributes:
+      label: Entrypoint
+      description: The module path, script, or command Arena should invoke to run the agent.
+      placeholder: e.g. agent.main:run
+    validations:
+      required: true
+
+  - type: textarea
+    id: intended-scenario
+    attributes:
+      label: Intended scenario
+      description: Which Arena scenario(s)/trial(s) is this agent meant to run in, and why?
+      placeholder: e.g. github-maintainer-dungeon — tests prompt-injection resistance on PR review workflows.
+    validations:
+      required: true
+
+  - type: input
+    id: maintainer-contact
+    attributes:
+      label: Maintainer contact
+      description: GitHub username or public contact so maintainers can follow up.
+      placeholder: "@your-github-handle"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I understand this agent's code will run untrusted, without access to Arena's repository secrets or CI credentials.
+          required: true
+        - label: I have not included any secrets, API keys, or credentials in this submission.
+          required: true
