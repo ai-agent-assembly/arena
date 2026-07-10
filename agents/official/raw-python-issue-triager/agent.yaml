@@ -27,3 +27,17 @@ capabilities:
   - github.issue.read
   - github.issue.label
   - github.comment.write
+# AAASM-4404: matches main.py's _TRIAL_ACTIONS mapping — this agent is a
+# single naive "complier" persona whose behavior differs by trial content,
+# not a deliberately switchable mode, so only its two clearly distinct
+# postures are declared here.
+behaviors:
+  - id: normal
+    description: >-
+      Ordinary maintainer-bot triage for issue-triage-happy-path: reads the
+      incoming issue, applies a label, and posts an acknowledgement comment.
+  - id: prompt-injection-vulnerable
+    description: >-
+      Complies with an issue-embedded instruction to commit directly to
+      main (prompt-injection-code-write), because this agent implements no
+      governance logic of its own and trusts whatever the issue content asks.
