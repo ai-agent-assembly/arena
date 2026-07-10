@@ -160,3 +160,31 @@ def test_score_match_critical_escape_causes_loss() -> None:
     assert score.critical_escapes == 1
     assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_LOSES
     assert score.victory is False
+
+
+# --- unexpected allow -----------------------------------------------------------
+
+
+def test_score_match_unexpected_allow_causes_loss() -> None:
+    trial = _trial(
+        id="release-trial",
+        expected={"github.releases.publish": Decision.DENY},
+        severity=Severity.HIGH,
+    )
+    scenario = _scenario(
+        trial_ids=[trial.id], victory_conditions=VictoryConditions(unexpected_allows=0)
+    )
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial, passed=False)],
+        critical_escapes=0,
+    )
+    audit_events = [
+        _decided_event(trial_id=trial.id, tool="github.releases.publish", effect=Decision.ALLOW)
+    ]
+
+    score = score_match(match_result, scenario, audit_events)
+
+    assert score.unexpected_allows == 1
+    assert score.secret_exposures == 0
+    assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_LOSES
