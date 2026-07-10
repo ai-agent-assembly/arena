@@ -1,0 +1,20 @@
+# Official demo manifest — same content as examples/manifests/raw-python-issue-triager.yaml,
+# placed here so `agents/official/` has a real fixture for AgentRegistry discovery
+# (AAASM-4366) rather than being an empty directory. The examples/ copy stays put
+# since AAASM-4365's tests reference that path directly.
+id: raw-python-issue-triager
+name: Raw Python Issue Triage Agent
+framework: raw-python
+author:
+  github: ai-agent-assembly
+entrypoint:
+  type: command
+  command: "uv run python main.py"
+runtime:
+  type: process
+scenarios:
+  - github-maintainer-dungeon
+capabilities:
+  - github.issue.read
+  - github.issue.label
+  - github.comment.write
