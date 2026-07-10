@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AAASM-4371: keep committed fake CI log fixtures despite the blanket *.log
+# ignore rule above — these are static test data, not generated output.
+!tests/fixtures/**/*.log
