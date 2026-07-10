@@ -13,11 +13,14 @@ import pytest
 
 from arena.integrations.adapter import AdapterChoice
 from arena.integrations.audit import REDACTION_MARKER, AuditEventStatus, read_audit_events
+from arena.integrations.decision import DefenseDecision
+from arena.models.scenario import Decision, Severity, TrialSpec
 from arena.registry.discovery import discover_agents
 from arena.runner.events import MatchEvent, MatchEventType
 from arena.runner.match import (
     MatchConfig,
     MatchOrchestrationError,
+    _trial_expectations_satisfied,
     generate_match_id,
     run_match,
     select_agents,
@@ -529,3 +532,157 @@ def test_run_match_redacts_persisted_args_for_redact_decision(tmp_path: Path) ->
     assert len(raw_lines) == 1
     payload = json.loads(raw_lines[0])
     assert payload["attempt"]["args"] == {"body": REDACTION_MARKER}
+
+
+# --- agent-role-aware expected coverage (AAASM-4408) -------------------------
+#
+# AAASM-4408's fix: `trial.expected` no longer requires a single agent to
+# have attempted *every* key. `_trial_expectations_satisfied` is the
+# extracted, directly-testable function `TrialOutcome.passed` delegates to
+# (see its own docstring in `arena.runner.match`); these tests exercise it
+# directly, including with hand-built `DefenseDecision`s a live
+# `FakeAgentAssemblyClient` (whose decisions are always copied straight from
+# `trial.expected`) could never actually produce — that's the only way to
+# reach the "attempted but wrong decision" branch at all, which is what
+# proves the fix didn't also weaken AAASM-4380's fail-closed guarantee.
+
+
+def _decision(effect: Decision) -> DefenseDecision:
+    return DefenseDecision(
+        effect=effect, layer="policy", reason="test decision", severity=Severity.LOW
+    )
+
+
+def _trial(expected: dict[str, Decision], agent_roles: list[str] | None = None) -> TrialSpec:
+    return TrialSpec(
+        id="role-aware-trial",
+        description="A trial used for AAASM-4408 pass/fail semantics tests.",
+        agent_roles=agent_roles or [],
+        expected=expected,
+        severity=Severity.HIGH,
+    )
+
+
+def test_trial_expectations_satisfied_true_for_full_coverage() -> None:
+    # The pre-AAASM-4408 case still works: every expected key attempted and
+    # matched.
+    trial = _trial({"tool.a": Decision.ALLOW, "tool.b": Decision.DENY})
+    decisions = {"tool.a": _decision(Decision.ALLOW), "tool.b": _decision(Decision.DENY)}
+
+    assert _trial_expectations_satisfied(trial, decisions) is True
+
+
+def test_trial_expectations_satisfied_true_for_partial_role_specific_coverage() -> None:
+    # This is AAASM-4408's actual fix: two different agent roles each only
+    # attempt their own slice of a multi-key `expected` map (e.g.
+    # `docs.write` for a docs agent vs. `github.issues.comment` for an
+    # issue triager on the same trial) — neither needs to touch the other's
+    # unrelated key to pass.
+    trial = _trial(
+        {"docs.write": Decision.ALLOW, "github.issues.comment": Decision.ALLOW},
+        agent_roles=["issue_triager", "docs_maintainer"],
+    )
+
+    docs_agent_decisions = {"docs.write": _decision(Decision.ALLOW)}
+    triager_decisions = {"github.issues.comment": _decision(Decision.ALLOW)}
+
+    assert _trial_expectations_satisfied(trial, docs_agent_decisions) is True
+    assert _trial_expectations_satisfied(trial, triager_decisions) is True
+
+
+def test_trial_expectations_satisfied_false_when_no_decisions_at_all() -> None:
+    # Non-vacuous guard: an agent process that emitted nothing does not get
+    # to pass a trial it never touched.
+    trial = _trial({"tool.a": Decision.ALLOW})
+
+    assert _trial_expectations_satisfied(trial, {}) is False
+
+
+def test_trial_expectations_satisfied_false_when_only_irrelevant_tools_attempted() -> None:
+    # Non-vacuous guard also applies when the agent attempted something, but
+    # nothing that trial.expected actually covers — e.g. an agent whose
+    # role has no legitimate reason to act on this trial at all (mirrors
+    # mock-malicious-agent emitting nothing for issue-triage-happy-path
+    # live — see the AAASM-4408 PR description's trial-outcome table).
+    trial = _trial({"tool.a": Decision.ALLOW})
+    decisions = {"unrelated.tool": _decision(Decision.ALLOW)}
+
+    assert _trial_expectations_satisfied(trial, decisions) is False
+
+
+def test_trial_expectations_satisfied_false_when_attempted_action_decision_is_wrong() -> None:
+    # Regression test for the fail-closed guarantee AAASM-4408 must not
+    # weaken: an agent's own attempted, trial.expected-covered action
+    # receiving the *wrong* decision (e.g. an `allow` where `deny` was
+    # expected — the shape of langgraph-docs-agent's `fs.write` on
+    # prompt-injection-code-write, had agent-assembly's governance actually
+    # let it through) still fails the trial, regardless of how many other
+    # keys the agent skipped or got right.
+    trial = _trial({"fs.write": Decision.DENY, "docs.write": Decision.ALLOW})
+    decisions = {
+        "fs.write": _decision(Decision.ALLOW),  # wrong: should have been denied
+        "docs.write": _decision(Decision.ALLOW),  # this one is correct
+    }
+
+    assert _trial_expectations_satisfied(trial, decisions) is False
+
+
+def test_trial_expectations_satisfied_ignores_keys_outside_expected() -> None:
+    # Forward-compat with a future non-FAKE adapter: a decision for a tool
+    # with no trial.expected entry at all doesn't factor into this
+    # function's verdict either way (run_match's own MissingDecisionError /
+    # audit_failure handling is what fails that case, separately).
+    trial = _trial({"tool.a": Decision.ALLOW})
+    decisions = {
+        "tool.a": _decision(Decision.ALLOW),
+        "tool.outside.expected": _decision(Decision.DENY),
+    }
+
+    assert _trial_expectations_satisfied(trial, decisions) is True
+
+
+def test_run_match_two_agents_each_cover_only_their_own_expected_slice(tmp_path: Path) -> None:
+    """Orchestration-level counterpart to the unit tests above: two
+    `run_match`-launched agents, each attempting only one of a two-key
+    trial, both pass — reproducing AAASM-4408's actual motivating gap
+    (raw-python-issue-triager and langgraph-docs-agent both failing
+    `issue-triage-happy-path` under the old all-keys-required semantics)
+    and proving it's fixed via the real orchestration path, not just the
+    extracted helper.
+    """
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+
+    _write_custom_scenario(
+        scenarios_root,
+        "role-aware-scenario",
+        "role-aware-trial",
+        {"docs.write": "allow", "github.issues.comment": "allow"},
+    )
+    _write_emitting_agent(
+        official_root,
+        "docs-agent",
+        "role-aware-scenario",
+        ["role-aware-scenario"],
+        {"role-aware-trial": [("docs.write", "docs/usage.md", {})]},
+    )
+    _write_emitting_agent(
+        official_root,
+        "triager-agent",
+        "role-aware-scenario",
+        ["role-aware-scenario"],
+        {"role-aware-trial": [("github.issues.comment", "issues/1", {})]},
+    )
+
+    config = MatchConfig(
+        scenarios_root=scenarios_root,
+        official_root=official_root,
+        community_root=community_root,
+        output_root=tmp_path / "runs",
+    )
+    result = run_match("role-aware-scenario", config)
+
+    outcomes_by_agent = {outcome.agent_id: outcome for outcome in result.trial_outcomes}
+    assert outcomes_by_agent["docs-agent"].passed is True
+    assert outcomes_by_agent["triager-agent"].passed is True

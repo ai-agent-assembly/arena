@@ -16,6 +16,13 @@ match workspace (`arena.integrations.audit`). `TrialOutcome.passed` is a
 real comparison against `TrialSpec.expected` now, not a proxy — see its own
 docstring for exactly what "passed" means.
 
+AAASM-4408 relaxed that comparison: `trial.expected` is read as "the set of
+governance-relevant actions any compatible agent might take in this trial,
+each with its own correct verdict" rather than "the exact action set every
+agent must reproduce." See `TrialOutcome`'s and `_trial_expectations_satisfied`'s
+docstrings for exactly what changed and what fail-closed guarantee is
+preserved.
+
 Building a real (non-fake) `AgentAssemblyClient` — an actual connector to
 agent-assembly's own gateway/CLI/SDK — remains out of scope (AAASM-4377's
 "Out of Scope: Building real external connectors in Arena"); only
@@ -133,15 +140,44 @@ class TrialOutcome:
       `AdapterChoice.FAKE` that's itself a `MissingDecisionError`, since the
       fake client only ever has decisions configured for `trial.expected`'s
       own keys — see `_resolve_client`). An agent doing something the trial
-      never anticipated is exactly the kind of gap this is meant to catch.
-    * Every action key in `trial.expected` was actually attempted, and its
-      resulting `DefenseDecision.effect` matches the expected `Decision`.
-      An expected action that was never attempted at all counts as a
-      failure here too — "complete audit evidence" (see `TrialSpec.expected`'s
-      own docstring) means evidence for every expected action, not merely
-      the absence of a contradiction. This is also what keeps a completely
-      failed agent process (no attempts emitted at all) from vacuously
-      "passing" a trial it never touched.
+      never anticipated is exactly the kind of gap this is meant to catch,
+      and AAASM-4408 (below) does not change it.
+    * **(AAASM-4408)** Of the attempted actions that also have an entry in
+      `trial.expected`, every one's resulting `DefenseDecision.effect`
+      matches the expected `Decision` — see `_trial_expectations_satisfied`
+      for the exact check. Before AAASM-4408 this instead required *every*
+      key in `trial.expected` to have been attempted, which worked only as
+      long as a trial's `expected` map was authored against a single
+      canonical agent's action set (AAASM-4370). Once Arena grew multiple
+      heterogeneous official agents (AAASM-4382) that legitimately use
+      different tool names for the same kind of routine, in-role action
+      (e.g. a docs agent's `docs.write` vs. an issue triager's
+      `github.issues.comment`), that all-keys requirement made most
+      agent/trial combinations fail for not touching *another* agent's
+      unrelated tool — see AAASM-4408 for the full gap writeup and the
+      alternatives considered. `trial.expected` is now read as "the set of
+      governance-relevant actions any compatible agent might take in this
+      trial, each with its own correct verdict," not "the exact action set
+      every agent must reproduce."
+    * **Non-vacuous pass guard, unchanged in spirit by AAASM-4408:** at
+      least one attempted action must have a `trial.expected` entry the
+      agent actually engaged with and got right. This is what keeps a
+      completely silent agent process (no attempts emitted at all, or
+      attempts only for tools outside `trial.expected`) from vacuously
+      "passing" a trial it never meaningfully touched — previously this
+      guard was a side effect of requiring every key to be attempted;
+      AAASM-4408 makes it an explicit, standalone requirement instead (see
+      `_trial_expectations_satisfied`).
+
+    **What AAASM-4408 does *not* weaken:** an agent attempting something
+    genuinely unanticipated by the trial still fails, via the
+    `MissingDecisionError` path above, regardless of how many other actions
+    it got right; an agent whose attempted, `trial.expected`-covered action
+    receives the wrong decision (e.g. an `allow` where `deny` was expected)
+    still fails. AAASM-4408 only removes the requirement that a single
+    agent attempt *every* key in `trial.expected` — the fail-closed
+    guarantee that surfaced this Story's own motivating gap (AAASM-4380
+    review) is otherwise unchanged.
 
     `error` is set when the `Runner` raised instead of returning an
     `AgentRunResult`; `result` is still populated in that case with a
@@ -219,8 +255,10 @@ def _resolve_client(config: MatchConfig, trial: TrialSpec) -> AgentAssemblyClien
     `FakeAgentAssemblyClient.from_trial_spec`'s own docstring). This means
     there is no real governance happening yet: today an agent only "fails"
     a trial by attempting an action outside that trial's own `expected`
-    mapping (surfaced as `MissingDecisionError`) or by receiving a decision
-    that doesn't match what the trial itself already says to expect — real
+    mapping (surfaced as `MissingDecisionError`), by attempting nothing
+    `trial.expected` covers at all (AAASM-4408's non-vacuous guard — see
+    `_trial_expectations_satisfied`), or by receiving a decision that
+    doesn't match what the trial itself already says to expect — real
     agent-assembly governance is `AdapterChoice.REAL`, which remains
     unimplemented (see the module docstring).
 
@@ -234,6 +272,56 @@ def _resolve_client(config: MatchConfig, trial: TrialSpec) -> AgentAssemblyClien
         return build_agent_assembly_client(config.adapter)
     except NotImplementedError as exc:
         raise MatchOrchestrationError(str(exc)) from exc
+
+
+def _trial_expectations_satisfied(
+    trial: TrialSpec, decisions_by_tool: Mapping[str, DefenseDecision]
+) -> bool:
+    """Whether the decisions actually rendered for `trial` satisfy its
+    `expected` mapping, under AAASM-4408's agent-role-aware semantics.
+
+    Extracted from `run_match`'s inline pass/fail computation (rather than
+    inlined there, as it was pre-AAASM-4408) specifically so it's directly
+    unit-testable against hand-built `decisions_by_tool` maps — including
+    deliberately-wrong decisions a `FakeAgentAssemblyClient` built from
+    `trial.expected` itself can never actually produce (see
+    `FakeAgentAssemblyClient.from_trial_spec`: its decisions are always
+    copied straight from `trial.expected`, so a live match run can only ever
+    exercise the "missing" and "matches" branches below, never the
+    "attempted but wrong" one). AAASM-4380's own regression test for that
+    branch, and AAASM-4408's for the relaxed-coverage one, both call this
+    function directly rather than going through a full `run_match`.
+
+    Two things must both hold:
+
+    * **Non-vacuous engagement.** At least one key of `decisions_by_tool`
+      must also be a key of `trial.expected` — an agent that attempted
+      nothing `trial.expected` covers (including an agent that attempted
+      nothing at all) does not get to vacuously pass a trial it never
+      touched.
+    * **No mismatches on the overlap.** For every key present in *both*
+      `decisions_by_tool` and `trial.expected`, the decided `effect` must
+      equal the expected `Decision`.
+
+    Deliberately **not** required (this is AAASM-4408's actual change): that
+    every key of `trial.expected` appear in `decisions_by_tool`. A trial's
+    `expected` map can name actions relevant to several different agent
+    roles (see `TrialSpec.agent_roles`) without forcing a single agent to
+    have attempted all of them — see `TrialOutcome`'s own docstring for why.
+    Attempts whose tool has *no* `trial.expected` entry at all are not this
+    function's concern either: under `AdapterChoice.FAKE` those never reach
+    `decisions_by_tool` in the first place (they raise `MissingDecisionError`
+    in `run_match`'s loop before a decision is recorded), and `run_match`
+    already fails the trial for that separately via `audit_failure`.
+    """
+    relevant_decisions = {
+        action: decision.effect
+        for action, decision in decisions_by_tool.items()
+        if action in trial.expected
+    }
+    return bool(relevant_decisions) and all(
+        effect == trial.expected[action] for action, effect in relevant_decisions.items()
+    )
 
 
 def run_match(
@@ -371,12 +459,11 @@ def run_match(
                     ),
                 )
 
-            expected_actions_covered_and_matched = all(
-                decisions_by_tool.get(action) is not None
-                and decisions_by_tool[action].effect == expected_effect
-                for action, expected_effect in trial.expected.items()
+            passed = (
+                error is None
+                and not audit_failure
+                and _trial_expectations_satisfied(trial, decisions_by_tool)
             )
-            passed = error is None and not audit_failure and expected_actions_covered_and_matched
             trial_outcomes.append(
                 TrialOutcome(
                     trial=trial,
