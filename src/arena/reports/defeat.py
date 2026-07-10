@@ -48,12 +48,21 @@ touch the routing config's shape.
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from arena.integrations.audit import AuditEventStatus
 from arena.models.scenario import Decision, Severity
 from arena.reports.models import MatchReport, TrialReport
+
+#: Routing config YAML shipped alongside this module (see
+#: `DefeatRoutingConfig`/`load_defeat_routing_config`). Co-located with the
+#: code that reads it, the same way `arena.scenarios` co-locates its own
+#: schema and loader — no separate top-level `config/` directory exists
+#: elsewhere in this repo to mirror instead.
+DEFAULT_DEFEAT_ROUTING_CONFIG_PATH = Path(__file__).parent / "defeat_routing.yaml"
 
 
 class DefeatCategory(str, Enum):
@@ -263,3 +272,86 @@ def classify_defeats(report: MatchReport) -> list[DefeatClassification]:
         )
 
     return classifications
+
+
+class DefeatRoutingEntry(BaseModel):
+    """Where and how one `DefeatCategory` should be routed.
+
+    `extra="forbid"` and `frozen=True` mirror the rest of this codebase's
+    convention for a fact loaded once from config and never mutated.
+
+    Fields:
+        repo: The `<org>/<repo>` a defeat of this category should be filed
+            against (this subtask never files it — see the module docstring).
+        labels: Labels the eventual issue should carry.
+        title_prefix: Prefix for the eventual issue title, so every routed
+            defeat of a category reads consistently.
+        severity: How urgent this category is, independent of any single
+            trial's own `Severity` — a routing-config author's judgment
+            call on the category as a whole. Reuses
+            `arena.models.scenario.Severity` rather than a new enum, since
+            the values (`low`/`medium`/`high`/`critical`) already mean
+            exactly the same thing here.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    repo: str = Field(min_length=1)
+    labels: tuple[str, ...] = Field(min_length=1)
+    title_prefix: str = Field(min_length=1)
+    severity: Severity
+
+
+class DefeatRoutingConfig(BaseModel):
+    """The full defeat-routing table: one `DefeatRoutingEntry` per `DefeatCategory`.
+
+    Loaded from `defeat_routing.yaml` (see `load_defeat_routing_config`),
+    mirroring `arena.scenarios.loader`'s load-and-validate pattern for the
+    rest of this codebase's YAML config.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    defeat_routing: dict[DefeatCategory, DefeatRoutingEntry]
+
+    @field_validator("defeat_routing")
+    @classmethod
+    def _covers_every_category(
+        cls, value: dict[DefeatCategory, DefeatRoutingEntry]
+    ) -> dict[DefeatCategory, DefeatRoutingEntry]:
+        missing = [category for category in DefeatCategory if category not in value]
+        if missing:
+            raise ValueError(
+                f"defeat_routing is missing entries for: {[c.value for c in missing]!r}"
+            )
+        return value
+
+
+class DefeatRoutingConfigLoadError(Exception):
+    """Raised when the defeat routing config YAML is missing, malformed, or invalid."""
+
+
+def load_defeat_routing_config(
+    path: Path = DEFAULT_DEFEAT_ROUTING_CONFIG_PATH,
+) -> DefeatRoutingConfig:
+    """Load and validate the defeat routing config from `path`.
+
+    Mirrors `arena.scenarios.loader._read_yaml_mapping` +
+    `TrialSpec.model_validate`'s load-and-validate shape rather than
+    reusing that private helper directly (a one-file, non-scenario config
+    doesn't warrant a shared dependency between the two loaders).
+    """
+    if not path.is_file():
+        raise DefeatRoutingConfigLoadError(f"{path}: no such file")
+    try:
+        raw = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as exc:
+        raise DefeatRoutingConfigLoadError(f"{path}: invalid YAML — {exc}") from exc
+    if not isinstance(raw, dict):
+        raise DefeatRoutingConfigLoadError(f"{path}: expected a YAML mapping at the top level")
+    try:
+        return DefeatRoutingConfig.model_validate(raw)
+    except ValidationError as exc:
+        raise DefeatRoutingConfigLoadError(
+            f"{path}: invalid defeat routing config — {exc}"
+        ) from exc
