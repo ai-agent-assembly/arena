@@ -37,6 +37,7 @@ from pydantic import ValidationError
 
 from arena.integrations.adapter import FakeAgentAssemblyClient
 from arena.integrations.audit import (
+    REDACTION_MARKER,
     ArenaAuditEvent,
     AuditEventStatus,
     append_audit_event,
@@ -388,3 +389,86 @@ def test_arena_audit_event_rejects_invalid_effect_embedded_via_raw_json_replay(
 
     with pytest.raises(ValidationError):
         read_audit_events(path)
+
+
+# --- 4. Redaction-flag propagation, end to end through the audit log ---------
+
+
+def test_read_audit_events_redacts_replayed_args_for_redact_decision(tmp_path: Path) -> None:
+    """Prove redaction propagates end-to-end through *both* halves of the
+    persistence round trip, not just the write side (already covered by
+    `test_integrations_audit.py::test_redact_decision_replaces_persisted_args`,
+    which only inspects the raw JSON on disk). A caller of `read_audit_events`
+    — the only supported way to consume a persisted audit log — must see
+    redacted args on replay, exactly as if it had never seen the original
+    in-memory event at all.
+    """
+    path = tmp_path / "audit.jsonl"
+    attempt = _attempt(args={"body": "sk-fake-secret-value", "issue": "42"})
+    event = ArenaAuditEvent.for_decision(
+        match_id="match-1", attempt=attempt, decision=_decision(Decision.REDACT)
+    )
+
+    append_audit_event(path, event)
+    replayed = read_audit_events(path)
+
+    assert len(replayed) == 1
+    assert replayed[0].attempt is not None
+    assert replayed[0].attempt.args == {
+        "body": REDACTION_MARKER,
+        "issue": REDACTION_MARKER,
+    }
+    # The replayed decision itself is untouched — REDACT is a signal about
+    # the attempt's args, not about the decision record.
+    assert replayed[0].decision is not None
+    assert replayed[0].decision.effect is Decision.REDACT
+
+
+@pytest.mark.parametrize("effect", [d for d in Decision if d is not Decision.REDACT])
+def test_read_audit_events_preserves_replayed_args_for_non_redact_decision(
+    tmp_path: Path, effect: Decision
+) -> None:
+    """The converse of the above, replayed: a non-`REDACT` decision's args
+    must come back byte-for-byte unchanged through `read_audit_events` — the
+    redaction flag must not leak into decisions it wasn't attached to.
+    """
+    path = tmp_path / "audit.jsonl"
+    attempt = _attempt(args={"body": "plain, unredacted value"})
+    event = ArenaAuditEvent.for_decision(
+        match_id="match-1", attempt=attempt, decision=_decision(effect)
+    )
+
+    append_audit_event(path, event)
+    replayed = read_audit_events(path)
+
+    assert replayed[0].attempt is not None
+    assert replayed[0].attempt.args == {"body": "plain, unredacted value"}
+
+
+def test_run_match_redaction_survives_full_persist_and_replay_cycle(tmp_path: Path) -> None:
+    """Orchestration-level version: an agent that triggers a `REDACT`
+    decision through the real `run_match` pipeline must have its persisted
+    audit log replay with redacted args — proving the flag actually
+    propagates from `TrialSpec.expected` -> `FakeAgentAssemblyClient` ->
+    `ArenaAuditEvent` -> JSONL -> replay, not merely that the audit module's
+    own redaction function works in isolation (that's tests 1-2 above).
+    """
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    _write_scenario(
+        scenarios_root,
+        "contract-scenario",
+        "redact-e2e-trial",
+        {"log.write": "redact"},
+    )
+    actions: dict[str, list[tuple[str, str, dict[str, str]]]] = {
+        "redact-e2e-trial": [("log.write", "logs/output.txt", {"body": "sk-fake-secret-value"})]
+    }
+    _write_emitting_agent(official_root, "emit-agent", "contract-scenario", actions)
+
+    result = run_match("contract-scenario", _match_config(tmp_path, scenarios_root, official_root))
+
+    replayed = read_audit_events(result.workspace / "audit.jsonl")
+    assert len(replayed) == 1
+    assert replayed[0].attempt is not None
+    assert replayed[0].attempt.args == {"body": REDACTION_MARKER}
