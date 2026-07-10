@@ -1,0 +1,12 @@
+# Schema-valid, but `id` intentionally does not match the directory name
+# ("wrong-dir-name") — exercises the folder-structure check.
+id: actual-agent-id
+name: Mismatched Agent
+framework: raw-python
+entrypoint:
+  type: command
+  command: "python main.py"
+runtime:
+  type: process
+scenarios:
+  - scenario-a

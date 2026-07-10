@@ -1,0 +1,38 @@
+name: Validate Community Agent Manifests
+
+# Runs static validation (schema + folder-structure) on community agent
+# submissions in a PR. Deliberately uses `pull_request`, not
+# `pull_request_target`: this workflow gets the default read-only,
+# secret-less GITHUB_TOKEN and no access to repository secrets, even when
+# the PR is from a fork. It only parses `agent.yaml` files and checks
+# directory layout — it never invokes an agent's declared `entrypoint`
+# (`command`/`image`), so it's safe to run on untrusted submissions.
+# See CONTRIBUTING.md's "Security: untrusted code and secrets" section.
+on:
+  pull_request:
+    paths:
+      - "agents/community/**"
+
+jobs:
+  validate-community-manifests:
+    name: Validate community agent manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      # `agents validate` on a directory validates every <agent-id>/agent.yaml
+      # under it (schema + agent-id-matches-directory-name) and exits 0 with
+      # a "no agent submissions found" message when the directory has no
+      # entries yet, so this step is a clean no-op before the first
+      # community submission lands.
+      - name: Validate agents/community manifests
+        run: uv run aasm-arena agents validate agents/community
