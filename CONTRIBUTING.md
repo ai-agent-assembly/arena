@@ -13,6 +13,12 @@ Arena is a public repo and welcomes outside contributions — new agent plugins,
 
 Submitted agent plugins are, by definition, untrusted code from the public. **Untrusted PR code is never run with repository secrets or elevated CI credentials.** Match execution happens inside the runner's sandboxed execution boundary (Docker or an isolated process, depending on the agent's declared execution profile), which has no access to Arena's own repo/CI secrets regardless of what the submitted agent's code attempts to do. Any contribution or workflow change that would give untrusted PR code access to secrets is out of scope and will not be accepted — see `docs/architecture.md` for where this boundary sits in the pipeline.
 
+### What CI does — and doesn't — run on a PR
+
+A PR touching `agents/community/**` automatically triggers a **manifest validation** workflow (`.github/workflows/validate-community-agents.yml`). This only parses and schema-checks `agent.yaml` and checks the submission's folder layout (the agent id matches its directory name, `agent.yaml` is present) — it never invokes the agent's declared `entrypoint` (`command`/`image`). It runs on `pull_request`, not `pull_request_target`, so it works on fork PRs without any repository secrets.
+
+A **full arena match** — the runner actually starting the agent inside its sandbox and playing it through a scenario's trials — is **not** triggered automatically on every PR. It only runs after the PR has merged to `main` (as part of Arena's scheduled match rotation, per "How contributions flow" above) or when a maintainer explicitly triggers one, since a match executes the submitted agent's real code rather than just validating its manifest.
+
 ## What to read first
 
 - [`README.md`](README.md) — what Arena is and isn't.
