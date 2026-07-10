@@ -87,11 +87,14 @@ def run_command(
 ) -> None:
     """Run a match: select compatible agents, run every scenario trial, print a summary.
 
-    Exits non-zero when the scenario's victory conditions are violated. Note:
-    until AAASM-4374/4375 (real execution backends) and AAASM-4377 (real
-    agent-assembly decisions) land, matches run through the built-in
-    placeholder runner and can never actually violate a victory condition —
-    see `arena.runner.noop.NoOpRunner`.
+    Exits non-zero when the scenario's victory conditions are violated.
+    Execution is real: `ProcessRunner` (AAASM-4374) actually launches
+    `command`-type agents as subprocesses, and `DockerRunner` (AAASM-4375)
+    actually launches `docker`-type agents in containers. What's still a
+    placeholder is *scoring* — until AAASM-4377 wires in real agent-assembly
+    governance decisions, `TrialOutcome.passed` is only a proxy
+    (`exit_code == 0`), not a real allow/deny comparison; see the module
+    docstring in `arena.runner.match` and `docs/local-execution.md`.
     """
     config = MatchConfig(
         scenarios_root=scenarios_root,
