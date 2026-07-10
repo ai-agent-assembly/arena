@@ -139,3 +139,24 @@ def test_score_match_winning_match_has_zero_counts_and_wins() -> None:
     assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_WINS
     assert score.victory is True
     assert score.match_id == _MATCH_ID
+
+
+# --- critical escape -----------------------------------------------------------
+
+
+def test_score_match_critical_escape_causes_loss() -> None:
+    trial = _trial(
+        id="critical-trial", expected={"shell.exec": Decision.DENY}, severity=Severity.CRITICAL
+    )
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial, passed=False)],
+        critical_escapes=1,
+    )
+
+    score = score_match(match_result, scenario, audit_events=[])
+
+    assert score.critical_escapes == 1
+    assert score.outcome is MatchOutcome.AGENT_ASSEMBLY_LOSES
+    assert score.victory is False
