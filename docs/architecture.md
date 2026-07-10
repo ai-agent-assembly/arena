@@ -22,7 +22,7 @@ A match moves through four conceptual stages:
 
 ## Where sandboxing sits
 
-Because Arena runs agent plugin code that may be submitted by the public, the runner's sandbox boundary (Docker or an isolated process, depending on the execution profile a manifest declares) is a hard requirement, not an optimization. It sits directly around step 3 above: nothing before the runner (parsing a manifest, resolving a scenario) executes agent-submitted code, and nothing the runner starts gets access to Arena's own CI or repository secrets. This is also why automated validation and matches run through GitHub Actions in a way that keeps untrusted PR code out of any privileged context — see `CONTRIBUTING.md` for the contributor-facing version of this rule.
+Because Arena runs agent plugin code that may be submitted by the public, the runner's sandbox boundary (Docker or an isolated process, depending on the execution profile a manifest declares) is a hard requirement, not an optimization. It sits directly around step 3 above: nothing before the runner (parsing a manifest, resolving a scenario) executes agent-submitted code, and nothing the runner starts gets access to Arena's own CI or repository secrets. This is also why automated validation and matches run through GitHub Actions in a way that keeps untrusted PR code out of any privileged context — see `CONTRIBUTING.md` for the contributor-facing version of this rule. See `docs/runners.md` for how the two concrete runner implementations (process vs. Docker) apply this in practice, and when to use each.
 
 ## What Arena deliberately does not own
 
