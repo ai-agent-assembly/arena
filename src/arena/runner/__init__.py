@@ -1,5 +1,9 @@
-"""Placeholder package: Match runner that executes scenarios against registered agents.
+"""Match runner: orchestrates matches and executes agents against trials.
 
-This ticket (AAASM-4361) only creates the package skeleton. No logic is
-implemented here. Logic lands in AAASM-4377+.
+`arena.runner.match` implements match/trial orchestration (AAASM-4373):
+loading a scenario, selecting compatible agents, and running every trial for
+every selected agent through a `Runner` (`arena.runner.base`), emitting
+lifecycle events (`arena.runner.events`) along the way. `arena.runner.noop`
+is a temporary placeholder `Runner` implementation; the real execution
+backends (process, Docker) land in AAASM-4374/4375.
 """
