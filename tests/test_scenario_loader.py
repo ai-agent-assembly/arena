@@ -6,11 +6,21 @@ from pathlib import Path
 
 import pytest
 
+from arena.models.manifest import (
+    AgentEntrypoint,
+    AgentFramework,
+    AgentManifest,
+    AgentRuntime,
+    BehaviorProfile,
+    EntrypointType,
+    RuntimeType,
+)
 from arena.scenarios.loader import (
     ScenarioLoadError,
     load_scenario,
     load_scenario_registry,
     load_trial,
+    validate_trial_behaviors,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "scenarios"
@@ -123,3 +133,95 @@ def test_load_scenario_registry_ignores_non_scenario_subdirectories(
     registry = load_scenario_registry(tmp_path)
 
     assert registry == {}
+
+
+# --- validate_trial_behaviors (AAASM-4404) ------------------------------
+
+
+def _manifest(agent_id: str, behaviors: list[BehaviorProfile] | None = None) -> AgentManifest:
+    return AgentManifest(
+        id=agent_id,
+        name=agent_id.title(),
+        framework=AgentFramework.RAW_PYTHON,
+        entrypoint=AgentEntrypoint(type=EntrypointType.COMMAND, command="python main.py"),
+        runtime=AgentRuntime(type=RuntimeType.PROCESS),
+        scenarios=["example-scenario"],
+        behaviors=behaviors or [],
+    )
+
+
+def test_validate_trial_behaviors_passes_when_behavior_id_is_none() -> None:
+    # Backward compatibility: a bundle whose trials don't set behavior_id at
+    # all (every trial written before AAASM-4404) must validate cleanly
+    # against any compatible agents, including agents with no behaviors.
+    bundle = load_scenario(FIXTURES_DIR / "example-scenario")
+
+    validate_trial_behaviors(bundle, [_manifest("agent-one")])
+
+
+def test_validate_trial_behaviors_passes_when_declared_by_compatible_agent(
+    tmp_path: Path,
+) -> None:
+    scenario_dir = tmp_path / "behavior-scenario"
+    trials_dir = scenario_dir / "trials"
+    trials_dir.mkdir(parents=True)
+    (scenario_dir / "scenario.yaml").write_text(
+        "id: behavior-scenario\n"
+        "name: Behavior Scenario\n"
+        "description: Scenario used for behavior_id cross-referential tests.\n"
+        "trials:\n"
+        "  - behavior-trial\n"
+    )
+    (trials_dir / "behavior-trial.yaml").write_text(
+        "id: behavior-trial\n"
+        "description: A trial that targets a specific behavior profile.\n"
+        "expected:\n"
+        "  some.action: deny\n"
+        "severity: high\n"
+        "behavior_id: secret-seeking\n"
+    )
+    bundle = load_scenario(scenario_dir)
+
+    agent = _manifest(
+        "agent-with-behavior",
+        behaviors=[BehaviorProfile(id="secret-seeking", description="Reads a secrets file.")],
+    )
+
+    validate_trial_behaviors(bundle, [agent])
+
+
+def test_validate_trial_behaviors_raises_when_unsupported_by_any_compatible_agent(
+    tmp_path: Path,
+) -> None:
+    scenario_dir = tmp_path / "behavior-scenario"
+    trials_dir = scenario_dir / "trials"
+    trials_dir.mkdir(parents=True)
+    (scenario_dir / "scenario.yaml").write_text(
+        "id: behavior-scenario\n"
+        "name: Behavior Scenario\n"
+        "description: Scenario used for behavior_id cross-referential tests.\n"
+        "trials:\n"
+        "  - behavior-trial\n"
+    )
+    (trials_dir / "behavior-trial.yaml").write_text(
+        "id: behavior-trial\n"
+        "description: A trial that targets a specific behavior profile.\n"
+        "expected:\n"
+        "  some.action: deny\n"
+        "severity: high\n"
+        "behavior_id: secret-seeking\n"
+    )
+    bundle = load_scenario(scenario_dir)
+
+    # This agent is compatible with the scenario but declares no
+    # "secret-seeking" behavior (in fact, no behaviors at all) — the trial's
+    # behavior_id reference can never be satisfied.
+    agent = _manifest("agent-without-behavior")
+
+    with pytest.raises(ScenarioLoadError, match="secret-seeking") as exc_info:
+        validate_trial_behaviors(bundle, [agent])
+
+    message = str(exc_info.value)
+    assert "behavior-trial" in message
+    assert "behavior-scenario" in message
+    assert "agent-without-behavior" in message

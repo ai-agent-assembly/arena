@@ -79,10 +79,27 @@ class TrialSpec(BaseModel):
     agent_roles: list[str] = Field(default_factory=list)
     expected: dict[str, Decision] = Field(min_length=1)
     severity: Severity
+    #: Optional (AAASM-4404): when set, this trial expects the agent to run
+    #: under the named `BehaviorProfile` (`arena.models.manifest`) rather
+    #: than whichever mode it defaults to. `None` (the default) means "no
+    #: behavior-profile distinction" — every trial written before this
+    #: subtask, and any scenario that doesn't care about behavior profiles,
+    #: stays valid unchanged. Cross-referential validation — that a set
+    #: `behavior_id` is actually declared by an agent compatible with this
+    #: trial's scenario — is not this model's job; see
+    #: `arena.scenarios.loader.validate_trial_behaviors`.
+    behavior_id: str | None = None
 
     @field_validator("id")
     @classmethod
     def _id_is_kebab_case(cls, value: str) -> str:
+        return _validate_id(value)
+
+    @field_validator("behavior_id")
+    @classmethod
+    def _behavior_id_is_kebab_case_if_set(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return _validate_id(value)
 
     @field_validator("expected")

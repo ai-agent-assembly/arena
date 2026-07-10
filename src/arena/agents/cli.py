@@ -63,9 +63,10 @@ def _validate_manifest_file(manifest_path: Path) -> None:
             console.print(f"  [red]•[/red] [bold]{escape(field)}[/bold]: {escape(error['msg'])}")
         raise typer.Exit(code=1) from exc
 
+    behaviors = ", ".join(behavior.id for behavior in manifest.behaviors) or "none"
     console.print(
         f"[bold green]✓[/bold green] {escape(str(manifest_path))} is a valid manifest "
-        f"({escape(manifest.id)})"
+        f"({escape(manifest.id)}) — behaviors: {escape(behaviors)}"
     )
 
 
@@ -169,6 +170,7 @@ def list_agents(
     table.add_column("Framework")
     table.add_column("Source")
     table.add_column("Scenarios")
+    table.add_column("Behaviors")
 
     for agent in sorted(agents, key=lambda a: a.manifest.id):
         table.add_row(
@@ -177,6 +179,7 @@ def list_agents(
             escape(agent.manifest.framework.value),
             escape(agent.source.value),
             escape(", ".join(agent.manifest.scenarios)),
+            escape(", ".join(behavior.id for behavior in agent.manifest.behaviors) or "—"),
         )
 
     console.print(table)
