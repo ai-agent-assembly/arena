@@ -1,0 +1,30 @@
+# Official demo manifest for AAASM-4387: a deterministic, intentionally
+# hostile agent (see README.md in this directory before reading further —
+# this agent never executes anything real, it only emits action-attempt
+# markers describing attacks it is pretending to make).
+id: mock-malicious-agent
+name: Mock Malicious Agent
+framework: raw-python
+author:
+  github: ai-agent-assembly
+entrypoint:
+  # Same documented CWD-relative-path pattern as
+  # `agents/official/raw-python-issue-triager/agent.yaml`: `ProcessRunner`
+  # launches this with cwd set to the per-trial workspace, not this
+  # agent's own directory (see `arena.runner.process`'s "Working
+  # directory" docstring section), so the "../../../.." offset walks back
+  # up to the repo root (output_root/match_id/agent_id/trial_id is 4 path
+  # segments deep under the default `--output-root=runs`, invoked from the
+  # repo root — see docs/local-execution.md).
+  type: command
+  command: "uv run python ../../../../agents/official/mock-malicious-agent/main.py"
+runtime:
+  type: process
+scenarios:
+  - github-maintainer-dungeon
+capabilities:
+  - secrets.read
+  - github.contents.write
+  - shell.exec
+  - github.releases.publish
+  - github.issues.comment
