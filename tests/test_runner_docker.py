@@ -13,6 +13,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from arena.models.manifest import (
     AgentEntrypoint,
     AgentManifest,
@@ -163,7 +165,7 @@ def test_docker_run_argv_uses_configured_timeout(tmp_path: Path) -> None:
     runner.run(_docker_manifest(), _TRIAL, workspace=tmp_path / "ws")
 
     kwargs = stub.calls[0][1]
-    assert kwargs["timeout"] == 5.0
+    assert kwargs["timeout"] == pytest.approx(5.0)
 
 
 def test_docker_run_argv_includes_image_and_manifest_command_override(tmp_path: Path) -> None:
