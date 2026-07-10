@@ -125,6 +125,12 @@ class MatchConfig:
     #: package (which will hold report-*rendering* logic) — this is on-disk
     #: generated output, not source.
     output_root: Path = Path("runs")
+    #: Root directory the durable `arena-report.md`/`arena-report.json`/
+    #: `audit.jsonl` artifacts (AAASM-4390, `arena.reports.generate.generate_report`)
+    #: are written under, as `<reports_root>/<match-id>/`. Deliberately
+    #: separate from `output_root` — see `arena.reports.generate`'s module
+    #: docstring for why the two are not the same directory.
+    reports_root: Path = Path("reports/matches")
     runner_registry: RunnerRegistry = field(default_factory=default_runner_registry)
     #: Which `AgentAssemblyClient` implementation (`arena.integrations.adapter`)
     #: `run_match` uses to decide every parsed `ArenaActionAttempt`. See
