@@ -32,6 +32,15 @@ uv run aasm-arena --help
 
 `aasm-arena` is the intended CLI entrypoint for running scenarios and inspecting reports locally. Exact subcommands and flags will be documented as they land — this section will be filled in with real usage once the runner ships.
 
+## Sample reports
+
+Every match produces `arena-report.md` and `arena-report.json` (plus a raw `audit.jsonl`) under `reports/matches/<match-id>/`. Two deterministic samples, built from the real `github-maintainer-dungeon` scenario, are checked in under [`docs/samples/`](docs/samples/) so you can see the actual shape of a report without running a match yourself:
+
+- [`docs/samples/winning-match/`](docs/samples/winning-match/) ([Markdown](docs/samples/winning-match/arena-report.md) · [JSON](docs/samples/winning-match/arena-report.json)) — every trial resolves exactly as expected: `agent-assembly wins`, zero critical escapes, zero unexpected allows, zero secret exposures.
+- [`docs/samples/losing-match/`](docs/samples/losing-match/) ([Markdown](docs/samples/losing-match/arena-report.md) · [JSON](docs/samples/losing-match/arena-report.json)) — the `prompt-injection-code-write` trial's direct-push attempt is unexpectedly allowed instead of denied: `agent-assembly loses`, with exactly one critical escape.
+
+These are regenerated with `uv run python scripts/generate_report_samples.py` and asserted against by `tests/test_reports_snapshots.py` — see that module's docstring for the determinism strategy behind them.
+
 ## Submitting an agent
 
 At a high level, adding an agent to Arena means submitting a **manifest** — a YAML file describing how to build/run your agent, which framework it uses, and which scenarios it's eligible for — plus whatever plugin code the manifest points to. Submissions go through a public GitHub Issue Form and a PR, the same as any other contribution.
