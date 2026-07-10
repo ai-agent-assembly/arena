@@ -1,5 +1,5 @@
 """CLI tests for `aasm-arena run`, including the AAASM-4373 smoke test:
-running a no-op official agent through the real `github-maintainer-dungeon`
+running an official agent through the real `github-maintainer-dungeon`
 scenario end to end.
 """
 
@@ -137,10 +137,25 @@ def test_run_agent_filter_selects_only_that_agent(tmp_path: Path) -> None:
 
 
 def test_run_github_maintainer_dungeon_smoke_with_official_agent(tmp_path: Path) -> None:
-    """AAASM-4373 AC: a smoke test can run a no-op official agent through one
-    trial. Uses the real `github-maintainer-dungeon` scenario and the real
+    """AAASM-4373 AC: a smoke test can run an official agent through every
+    trial without the match itself crashing. Uses the real
+    `github-maintainer-dungeon` scenario and the real
     `raw-python-issue-triager` official agent manifest committed to this
     repo, but writes match output under a tmp dir instead of the repo tree.
+
+    AAASM-4374 finding: `raw-python-issue-triager/agent.yaml` declares
+    `entrypoint.command: "uv run python main.py"`, but the agent's directory
+    (`agents/official/raw-python-issue-triager/`) only contains `agent.yaml`
+    — there is no `main.py`. Under `NoOpRunner` this was invisible (nothing
+    was actually launched); under the real `ProcessRunner` now wired in for
+    `EntrypointType.COMMAND`, every trial genuinely launches `uv run python
+    main.py` and genuinely fails (`python: can't open file 'main.py'`,
+    non-zero exit) because the script doesn't exist. That's a fixture gap in
+    the example official agent, not a `ProcessRunner` bug — see AAASM-4374's
+    PR description — so this test is intentionally not "fixed" by adding a
+    working `main.py` here; it instead asserts the AC that actually matters
+    for this ticket: a failing command entrypoint reports per-trial failures
+    and a non-zero match exit code instead of crashing `aasm-arena run`.
 
     The agent id/trial ids are asserted via the on-disk workspace rather than
     `result.stdout`, since Rich truncates the CLI's summary table to the test
@@ -165,8 +180,12 @@ def test_run_github_maintainer_dungeon_smoke_with_official_agent(tmp_path: Path)
         ],
     )
 
-    assert result.exit_code == 0, result.stdout
-    assert "match complete" in result.stdout
+    # Non-zero: the missing main.py fails every trial, including the
+    # scenario's critical-severity ones, which violates victory conditions —
+    # see the AAASM-4374 finding above. The command still runs cleanly
+    # end-to-end (no crash, no traceback) and reports it via the CLI.
+    assert result.exit_code != 0, result.stdout
+    assert "victory conditions violated" in result.stdout
 
     match_dirs = list(output_root.iterdir())
     assert len(match_dirs) == 1

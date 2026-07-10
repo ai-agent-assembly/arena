@@ -188,17 +188,25 @@ def test_run_match_creates_match_and_trial_workspaces(match_config: MatchConfig)
     assert (result.workspace / "agent-one" / "critical-trial").is_dir()
 
 
-def test_run_match_with_noop_runner_never_violates_victory_conditions(
+def test_run_match_with_failing_command_reports_without_crashing(
     match_config: MatchConfig,
 ) -> None:
-    # Known limitation documented in arena.runner.noop: NoOpRunner always
-    # exits 0, so it can never trigger a critical escape until AAASM-4374+
-    # provide real execution and AAASM-4377 provides real decisions.
+    # AAASM-4374 wired ProcessRunner in as the default COMMAND runner, so
+    # this fixture's "python main.py" (no such file exists under the fixture
+    # agent dirs) now really launches and really fails — every trial for
+    # every agent gets a non-zero synthetic exit code from ProcessRunner
+    # instead of NoOpRunner's unconditional success. That's exactly the
+    # behavior this test now exercises: a failing agent process is reported
+    # as a lost trial/critical escape, not a crash of run_match itself (see
+    # AAASM-4372's "failed agent process does not crash the whole runner"
+    # acceptance criterion, and `Runner.run`'s docstring).
     result = run_match("test-scenario", match_config, now=_FIXED_NOW)
 
-    assert result.critical_escapes == 0
-    assert result.victory_conditions_violated is False
-    assert all(outcome.passed for outcome in result.trial_outcomes)
+    assert result.critical_escapes == 2  # one critical-trial per agent
+    assert result.victory_conditions_violated is True
+    assert all(not outcome.passed for outcome in result.trial_outcomes)
+    assert all(outcome.error is None for outcome in result.trial_outcomes)
+    assert all(outcome.result.exit_code != 0 for outcome in result.trial_outcomes)
 
 
 def test_run_match_event_sequence_is_ordered_and_deterministic(
