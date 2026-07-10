@@ -1,0 +1,11 @@
+# Intentionally invalid: `id` uses an unsafe identifier (uppercase +
+# underscore) and `runtime` is missing entirely — mirrors
+# tests/fixtures/manifests/invalid.yaml for the directory-validation path.
+id: Bad_Agent_ID
+name: Broken Demo Agent
+framework: raw-python
+entrypoint:
+  type: command
+  command: "uv run python main.py"
+scenarios:
+  - scenario-a
