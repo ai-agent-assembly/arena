@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  ci:
+    name: Lint, type-check, test, schema smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Type-check (mypy)
+        run: uv run mypy src
+
+      - name: Test (pytest)
+        run: uv run pytest
+
+      # AAASM-4363: Pydantic schemas for manifests/scenarios/reports don't
+      # exist yet (they land in AAASM-4364/4368). Until they do, "schema
+      # smoke check" means importing every arena subpackage so CI catches
+      # broken imports/syntax errors early; this gains real schema
+      # validation teeth once those tickets land.
+      - name: Schema smoke check (import every arena package)
+        run: |
+          uv run python -c "
+          import arena.cli
+          import arena.agents
+          import arena.integrations
+          import arena.models
+          import arena.registry
+          import arena.reporting
+          import arena.reports
+          import arena.runner
+          import arena.scenarios
+          print('arena package imports OK')
+          "
