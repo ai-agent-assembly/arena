@@ -76,13 +76,9 @@ def emit_action_attempt(
     resolved_agent_id = agent_id if agent_id is not None else os.environ.get("ARENA_AGENT_ID")
     resolved_trial_id = trial_id if trial_id is not None else os.environ.get("ARENA_TRIAL_ID")
     if not resolved_agent_id:
-        raise ValueError(
-            "agent_id was not given and ARENA_AGENT_ID is not set in the environment"
-        )
+        raise ValueError("agent_id was not given and ARENA_AGENT_ID is not set in the environment")
     if not resolved_trial_id:
-        raise ValueError(
-            "trial_id was not given and ARENA_TRIAL_ID is not set in the environment"
-        )
+        raise ValueError("trial_id was not given and ARENA_TRIAL_ID is not set in the environment")
 
     attempt = ArenaActionAttempt(
         agent_id=resolved_agent_id,
