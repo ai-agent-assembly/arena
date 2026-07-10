@@ -10,8 +10,10 @@ call the configured `AgentAssemblyClient` and record exactly one
 `ArenaAuditEvent` here — whether the adapter returned a real decision or
 raised `MissingDecisionError` — plus one more per malformed marker line
 `arena.integrations.parser.parse_action_attempts` couldn't even turn into an
-`ArenaActionAttempt` in the first place. Persisting these to JSONL is
-`arena.integrations.audit.append_audit_event`, added separately.
+`ArenaActionAttempt` in the first place. `append_audit_event`/
+`read_audit_events` below persist these to (and replay these from) an
+append-only JSONL file in the match workspace — see their own docstrings
+for the format guarantees.
 
 **Why embed rather than flatten.** `ArenaActionAttempt` already carries
 `agent_id`/`framework`/`scenario_id`/`trial_id`/`timestamp`, and
@@ -29,8 +31,10 @@ have no `DefenseDecision` to read severity from) — see `for_decision`/
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from enum import Enum
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -141,3 +145,35 @@ class ArenaAuditEvent(BaseModel):
             severity=severity,
             error=error,
         )
+
+
+def append_audit_event(path: Path, event: ArenaAuditEvent) -> None:
+    """Append `event` as one JSON line to the JSONL audit log at `path`.
+
+    Append-only by construction (opened in `"a"` mode) — never rewrites or
+    truncates prior lines, and each line is independently `json.loads()`-
+    able, so the file never needs to be parsed as a single JSON array to be
+    replayed. Creates `path`'s parent directory if it doesn't exist yet.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event.model_dump(mode="json")) + "\n")
+
+
+def read_audit_events(path: Path) -> list[ArenaAuditEvent]:
+    """Replay every `ArenaAuditEvent` from a JSONL audit log, in file order.
+
+    The inverse of `append_audit_event`: reads `path` line by line and
+    validates each one independently back into an `ArenaAuditEvent` — the
+    same per-line replay contract
+    `arena.integrations.parser.parse_action_attempts` established for
+    `ArenaActionAttempt` marker lines. Returns an empty list if `path`
+    doesn't exist (a match/trial with no attempts never creates one).
+    """
+    if not path.is_file():
+        return []
+    return [
+        ArenaAuditEvent.model_validate(json.loads(line))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
