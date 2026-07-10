@@ -1,5 +1,6 @@
-"""Placeholder package: Generated per-match report artifacts.
+"""Generated per-match report artifacts.
 
-This ticket (AAASM-4361) only creates the package skeleton. No logic is
-implemented here. Logic lands in AAASM-4372+.
+`arena.reports.scoring` (AAASM-4389) is the first logic to land here:
+turning a completed match into a `MatchScore` win/lose verdict. Markdown/
+JSON/JSONL report *rendering* on top of that score lands in AAASM-4390.
 """
