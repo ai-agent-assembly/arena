@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "arena"
+version = "0.0.0"
+description = "Governance trial arena for AI agents — agents attempt actions, agent-assembly governs, every match leaves a report."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+dependencies = [
+    "typer>=0.12.0,<1.0.0",
+    "rich>=13.7.0,<15.0.0",
+    "pydantic>=2.0.0,<3.0.0",
+]
+
+[project.scripts]
+aasm-arena = "arena.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/ai-agent-assembly/arena"
+Repository = "https://github.com/ai-agent-assembly/arena"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.1.0,<9.0.0",
+    "ruff>=0.6.0,<1.0.0",
+    "mypy>=1.11.0,<2.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arena"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["arena"]
+strict = true
