@@ -4,16 +4,17 @@ every selected agent through a `Runner`, and emit lifecycle events in order.
 This module owns the *orchestration* seam described in AAASM-4372's proposed
 design (`scenario + agents -> match id -> run trials -> launch agent ->
 collect action attempts -> ...`) up to and including "launch agent" via the
-`Runner` protocol (`arena.runner.base`). It intentionally does not implement:
+`Runner` protocol (`arena.runner.base`). Real agent execution now exists —
+`ProcessRunner` (AAASM-4374) for `COMMAND` entrypoints and `DockerRunner`
+(AAASM-4375) for `DOCKER` entrypoints, both registered in
+`default_runner_registry()`. This module intentionally does not implement:
 
-* Real agent execution (`ProcessRunner`/`DockerRunner`) — AAASM-4374/4375.
-  `RunnerRegistry` is the extension point those tickets plug into.
 * Calling agent-assembly to collect real governance decisions and comparing
   them against `TrialSpec.expected` — AAASM-4377.
 
-Because neither of those exist yet, `TrialOutcome.passed` here is a
-placeholder proxy (`AgentRunResult.exit_code == 0`), not a real decision
-comparison, and `MatchResult.critical_escapes` only counts non-zero exits on
+Because that doesn't exist yet, `TrialOutcome.passed` here is a placeholder
+proxy (`AgentRunResult.exit_code == 0`), not a real decision comparison, and
+`MatchResult.critical_escapes` only counts non-zero exits on
 `CRITICAL`-severity trials. That's the best signal available until
 AAASM-4377 lands — callers must not treat it as a real governance verdict.
 """
@@ -37,7 +38,7 @@ from arena.registry.discovery import (
 from arena.runner.base import AgentRunResult, Runner
 from arena.runner.docker import DockerRunner
 from arena.runner.events import MatchEvent, MatchEventType
-from arena.runner.noop import NoOpRunner
+from arena.runner.process import ProcessRunner
 from arena.scenarios.loader import ScenarioLoadError, load_scenario_registry
 
 
@@ -71,16 +72,14 @@ class RunnerRegistry:
 
 
 def default_runner_registry() -> RunnerRegistry:
-    """The out-of-the-box registry: `NoOpRunner` for every entrypoint type.
-
-    Temporary. AAASM-4374 is expected to swap in a `ProcessRunner` for
-    `EntrypointType.COMMAND` and AAASM-4375 a `DockerRunner` for
-    `EntrypointType.DOCKER`; nothing wired in here does real agent execution.
+    """The out-of-the-box registry: real execution for both `COMMAND`
+    (`ProcessRunner`, AAASM-4374) and `DOCKER` (`DockerRunner`, AAASM-4375)
+    entrypoints. `NoOpRunner` is no longer used here — it remains available
+    for tests/callers that want a runner with no side effects.
     """
-    placeholder = NoOpRunner()
     return RunnerRegistry(
         {
-            EntrypointType.COMMAND: placeholder,
+            EntrypointType.COMMAND: ProcessRunner(),
             EntrypointType.DOCKER: DockerRunner(),
         }
     )
