@@ -18,6 +18,7 @@ them.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
+from arena.models.manifest import AgentManifest
 from arena.models.scenario import ScenarioSpec, TrialSpec
 
 _SCENARIO_FILENAME = "scenario.yaml"
@@ -107,6 +109,46 @@ def load_scenario(scenario_dir: Path) -> ScenarioBundle:
 
     resolved_trials = [trials_by_id[trial_id] for trial_id in scenario.trials]
     return ScenarioBundle(scenario=scenario, trials=resolved_trials)
+
+
+def validate_trial_behaviors(
+    bundle: ScenarioBundle, compatible_agents: Sequence[AgentManifest]
+) -> None:
+    """Validate every trial's `behavior_id` (AAASM-4404), if set, against
+    the behaviors declared by agents compatible with this scenario.
+
+    `compatible_agents` is the set of `AgentManifest`s eligible to run
+    `bundle.scenario` — i.e. the manifests for which `bundle.scenario.id` is
+    a member of `AgentManifest.scenarios`, exactly what
+    `AgentRegistry.filter(scenario=...)` (`arena.registry.discovery`)
+    already computes. This function doesn't discover that set itself so it
+    stays decoupled from agent registry discovery; callers (e.g.
+    `arena.runner.match.run_match`) pass it in.
+
+    A trial with `behavior_id=None` is unaffected — behavior profiles are
+    opt-in per trial. A trial whose `behavior_id` is set but not declared by
+    *any* compatible agent's `behaviors` list fails validation: nothing
+    could ever satisfy that trial's expectation, which the schema should
+    catch here rather than surfacing as a mysterious runtime skip later.
+
+    Raises:
+        ScenarioLoadError: a trial references a `behavior_id` no compatible
+            agent declares.
+    """
+    declared_behavior_ids = {
+        behavior.id for agent in compatible_agents for behavior in agent.behaviors
+    }
+    for trial in bundle.trials:
+        if trial.behavior_id is None:
+            continue
+        if trial.behavior_id not in declared_behavior_ids:
+            compatible_agent_ids = sorted(agent.id for agent in compatible_agents)
+            raise ScenarioLoadError(
+                f"scenario {bundle.scenario.id!r} trial {trial.id!r} references "
+                f"behavior_id {trial.behavior_id!r}, which is not declared by any "
+                f"agent compatible with this scenario "
+                f"(compatible agents: {compatible_agent_ids!r})"
+            )
 
 
 def load_scenario_registry(root: Path) -> dict[str, ScenarioBundle]:
