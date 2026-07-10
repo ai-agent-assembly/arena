@@ -40,6 +40,13 @@ Untrusted, community-submitted agent code is never run with repository secrets o
 
 The detailed manifest schema, submission template, and validation flow are tracked in later tickets (starting with the manifest schema ticket) and aren't final yet — this README will link to them once they exist.
 
+## CI
+
+Every pull request and push to `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+`ruff check`, `ruff format --check`, `mypy src`, `pytest`, and an import smoke check
+across every `arena` subpackage (a stand-in "schema smoke check" until the
+Pydantic manifest/scenario/report schemas land). No secrets are required.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution framing, and [`docs/architecture.md`](docs/architecture.md) / [`docs/glossary.md`](docs/glossary.md) for the concepts referenced throughout this repo.
