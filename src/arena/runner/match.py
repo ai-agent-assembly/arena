@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from arena.integrations.adapter import AdapterChoice
 from arena.models.manifest import AgentManifest, EntrypointType
 from arena.models.scenario import ScenarioSpec, TrialSpec
 from arena.registry.discovery import (
@@ -98,6 +99,13 @@ class MatchConfig:
     #: generated output, not source.
     output_root: Path = Path("runs")
     runner_registry: RunnerRegistry = field(default_factory=default_runner_registry)
+    #: Which `AgentAssemblyClient` implementation (`arena.integrations.adapter`)
+    #: a live run would use. Not yet consumed by `run_match` itself — calling
+    #: agent-assembly for a real decision and comparing it against
+    #: `TrialSpec.expected` is AAASM-4380's job to wire in. This field exists
+    #: so the fake-vs-real choice is a config knob callers (and the CLI) can
+    #: already set and test, ahead of that wiring landing.
+    adapter: AdapterChoice = AdapterChoice.FAKE
 
 
 @dataclass(frozen=True)

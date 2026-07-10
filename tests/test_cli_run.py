@@ -136,6 +136,86 @@ def test_run_agent_filter_selects_only_that_agent(tmp_path: Path) -> None:
     assert "agent-b" not in result.stdout
 
 
+def test_run_default_adapter_is_fake_and_succeeds(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+    _write_scenario(scenarios_root)
+    _write_agent(official_root, "smoke-agent", ["test-scenario"])
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "test-scenario",
+            "--scenarios-root",
+            str(scenarios_root),
+            "--official-root",
+            str(official_root),
+            "--community-root",
+            str(community_root),
+            "--output-root",
+            str(tmp_path / "runs"),
+            "--adapter",
+            "fake",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+
+
+def test_run_unknown_adapter_exits_nonzero(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    scenarios_root.mkdir()
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "test-scenario",
+            "--scenarios-root",
+            str(scenarios_root),
+            "--official-root",
+            str(tmp_path / "agents" / "official"),
+            "--community-root",
+            str(tmp_path / "agents" / "community"),
+            "--output-root",
+            str(tmp_path / "runs"),
+            "--adapter",
+            "quantum",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "invalid --adapter" in " ".join(result.stdout.split())
+
+
+def test_run_real_adapter_exits_nonzero_not_implemented(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    scenarios_root.mkdir()
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "test-scenario",
+            "--scenarios-root",
+            str(scenarios_root),
+            "--official-root",
+            str(tmp_path / "agents" / "official"),
+            "--community-root",
+            str(tmp_path / "agents" / "community"),
+            "--output-root",
+            str(tmp_path / "runs"),
+            "--adapter",
+            "real",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "not implemented" in " ".join(result.stdout.split())
+
+
 def test_run_github_maintainer_dungeon_smoke_with_official_agent(tmp_path: Path) -> None:
     """AAASM-4373 AC: a smoke test can run an official agent through every
     trial without the match itself crashing. Uses the real
