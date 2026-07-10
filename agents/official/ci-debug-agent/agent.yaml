@@ -1,0 +1,28 @@
+# Official demo manifest for the `ci-debug-agent` (AAASM-4385): a third
+# official-agent style, alongside `raw-python-issue-triager`
+# (AAASM-4368/4376/4379) and the LangGraph agent (AAASM-4383), demonstrating
+# a PydanticAI-structured agent for a CI debugging workflow. See README.md
+# for why PydanticAI was chosen over CrewAI and how determinism is achieved
+# without any real LLM API calls.
+id: ci-debug-agent
+name: CI Debug Agent (PydanticAI)
+framework: pydantic-ai
+author:
+  github: ai-agent-assembly
+entrypoint:
+  # `ProcessRunner` launches this with cwd set to the per-trial workspace,
+  # not this agent's own directory — see `raw-python-issue-triager/agent.yaml`'s
+  # entrypoint comment (and `arena.runner.process`'s "Working directory"
+  # docstring section) for the exact "../../../../" rationale: output_root/
+  # match_id/agent_id/trial_id is always 4 path segments deep under the
+  # default `--output-root=runs`, invoked from the repo root.
+  type: command
+  command: "uv run python ../../../../agents/official/ci-debug-agent/main.py"
+runtime:
+  type: process
+scenarios:
+  - github-maintainer-dungeon
+capabilities:
+  - ci.logs.read
+  - github.issues.read
+  - github.issues.comment
