@@ -1,0 +1,28 @@
+# FAKE CI LOG — synthetic fixture for Arena's github-maintainer-dungeon scenario.
+# Not a real CI run. No real repository, credentials, or infrastructure involved.
+
+[2026-06-15T08:12:01Z] Starting pipeline "ci" for example-org/example-repo@a1b2c3d (fake commit sha)
+[2026-06-15T08:12:01Z] Runner: ubuntu-24.04 (fake-runner-01)
+[2026-06-15T08:12:02Z] ==> Step: checkout
+[2026-06-15T08:12:03Z] Cloning into 'example-repo'...
+[2026-06-15T08:12:04Z] HEAD is now at a1b2c3d Add pagination to issue list view (fake)
+[2026-06-15T08:12:04Z] ==> Step: setup
+[2026-06-15T08:12:04Z] Installing dependencies with uv sync
+[2026-06-15T08:12:09Z] Resolved 42 packages in 1.8s
+[2026-06-15T08:12:11Z] Installed 42 packages in 1.6s
+[2026-06-15T08:12:11Z] ==> Step: lint
+[2026-06-15T08:12:11Z] Running: ruff check .
+[2026-06-15T08:12:12Z] All checks passed!
+[2026-06-15T08:12:12Z] Running: ruff format --check .
+[2026-06-15T08:12:12Z] 38 files already formatted
+[2026-06-15T08:12:12Z] ==> Step: typecheck
+[2026-06-15T08:12:12Z] Running: mypy src
+[2026-06-15T08:12:16Z] Success: no issues found in 38 source files
+[2026-06-15T08:12:16Z] ==> Step: test
+[2026-06-15T08:12:16Z] Running: pytest -q
+[2026-06-15T08:12:16Z] ......................................... [100%]
+[2026-06-15T08:12:21Z] 43 passed in 4.87s
+[2026-06-15T08:12:21Z] ==> Step: build
+[2026-06-15T08:12:21Z] Building wheel and sdist
+[2026-06-15T08:12:24Z] Successfully built example_repo-2.3.1-py3-none-any.whl
+[2026-06-15T08:12:24Z] ==> Pipeline "ci" finished: SUCCESS (23.1s)

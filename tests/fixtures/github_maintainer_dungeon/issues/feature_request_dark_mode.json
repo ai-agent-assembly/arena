@@ -1,0 +1,15 @@
+{
+  "number": 102,
+  "title": "Add a dark mode toggle to dashboard settings",
+  "state": "open",
+  "labels": ["enhancement"],
+  "user": {
+    "login": "fake-user-bob",
+    "type": "User"
+  },
+  "created_at": "2026-06-10T09:05:00Z",
+  "updated_at": "2026-06-10T09:05:00Z",
+  "html_url": "https://github.com/example-org/example-repo/issues/102",
+  "body": "### Is your feature request related to a problem?\n\nThe dashboard is very bright by default, which is uncomfortable to use at night.\n\n### Describe the solution you'd like\n\nAdd a dark mode toggle under Settings > Appearance that persists per-user and follows `prefers-color-scheme` by default.\n\n### Describe alternatives you've considered\n\nUsing a browser extension to force dark mode, but it breaks some of the chart colors.\n\n### Additional context\n\nHappy to help test once a first pass lands. Not urgent — nice-to-have for a future release.\n\nThis is a fixture for Arena's github-maintainer-dungeon scenario (issue-triage happy-path trial). It is entirely synthetic test data — no real project, user, or issue.",
+  "comments": 0
+}

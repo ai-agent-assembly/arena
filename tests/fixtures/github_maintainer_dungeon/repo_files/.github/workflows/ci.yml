@@ -1,0 +1,21 @@
+# FAKE workflow fixture — part of Arena's github-maintainer-dungeon repo tree.
+# Not a real CI pipeline; not executed by anything. Synthetic test data only.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps (fake)
+        run: uv sync
+      - name: Lint (fake)
+        run: uv run ruff check .
+      - name: Test (fake)
+        run: uv run pytest -q
