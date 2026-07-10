@@ -17,6 +17,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from arena.agents.cli import agents_app
+from arena.integrations.adapter import AdapterChoice, build_agent_assembly_client
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
 from arena.runner.match import MatchConfig, MatchOrchestrationError, run_match
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
@@ -84,6 +85,12 @@ def run_command(
         "--output-root",
         help="Root directory under which each match's report workspace is created.",
     ),
+    adapter: str = typer.Option(
+        "fake",
+        "--adapter",
+        help="Which agent-assembly adapter to use: 'fake' (default, deterministic "
+        "backend) or 'real' (not yet implemented — out of scope for AAASM-4377).",
+    ),
 ) -> None:
     """Run a match: select compatible agents, run every scenario trial, print a summary.
 
@@ -91,16 +98,38 @@ def run_command(
     Execution is real: `ProcessRunner` (AAASM-4374) actually launches
     `command`-type agents as subprocesses, and `DockerRunner` (AAASM-4375)
     actually launches `docker`-type agents in containers. What's still a
-    placeholder is *scoring* — until AAASM-4377 wires in real agent-assembly
-    governance decisions, `TrialOutcome.passed` is only a proxy
-    (`exit_code == 0`), not a real allow/deny comparison; see the module
-    docstring in `arena.runner.match` and `docs/local-execution.md`.
+    placeholder is *scoring* — until AAASM-4380 wires real agent-assembly
+    governance decisions into orchestration, `TrialOutcome.passed` is only a
+    proxy (`exit_code == 0`), not a real allow/deny comparison; see the
+    module docstring in `arena.runner.match` and `docs/local-execution.md`.
+
+    `--adapter` selects which `AgentAssemblyClient` (AAASM-4378,
+    `arena.integrations.adapter`) a live run would use once that wiring
+    lands; it's validated and stored on `MatchConfig.adapter` here, but not
+    yet consumed by `run_match` itself.
     """
+    try:
+        adapter_choice = AdapterChoice(adapter)
+    except ValueError:
+        valid = ", ".join(choice.value for choice in AdapterChoice)
+        console.print(
+            f"[bold red]✗[/bold red] invalid --adapter {escape(adapter)!r}: "
+            f"must be one of {escape(valid)}"
+        )
+        raise typer.Exit(code=1) from None
+
+    try:
+        build_agent_assembly_client(adapter_choice)
+    except NotImplementedError as exc:
+        console.print(f"[bold red]✗[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
     config = MatchConfig(
         scenarios_root=scenarios_root,
         official_root=official_root,
         community_root=community_root,
         output_root=output_root,
+        adapter=adapter_choice,
     )
     try:
         result = run_match(scenario_id, config, agent_id=agent)
