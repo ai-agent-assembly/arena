@@ -35,6 +35,7 @@ from arena.registry.discovery import (
     discover_agents,
 )
 from arena.runner.base import AgentRunResult, Runner
+from arena.runner.docker import DockerRunner
 from arena.runner.events import MatchEvent, MatchEventType
 from arena.runner.noop import NoOpRunner
 from arena.scenarios.loader import ScenarioLoadError, load_scenario_registry
@@ -80,7 +81,7 @@ def default_runner_registry() -> RunnerRegistry:
     return RunnerRegistry(
         {
             EntrypointType.COMMAND: placeholder,
-            EntrypointType.DOCKER: placeholder,
+            EntrypointType.DOCKER: DockerRunner(),
         }
     )
 
