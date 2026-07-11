@@ -84,6 +84,12 @@ plugins:
       enable_creation_date: true
       enabled: true
       strict: true
+  # Documentation modification info — per-page author from local git history.
+  - git-authors:
+      show_contribution: false
+      show_line_count: false
+      show_email_address: false
+      sort_authors_by: contribution
 
 # Extensions
 markdown_extensions:
