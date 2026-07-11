@@ -1,0 +1,150 @@
+# Project information
+site_name: Arena
+site_url: https://docs.agent-assembly.com/arena/
+site_author: Agent Assembly Team
+site_description: >-
+  Arena is the public trial ground for agent-assembly governance. Agents
+  enter, agent-assembly defends, and every match leaves a report.
+
+# Repository
+repo_name: ai-agent-assembly/arena
+repo_url: https://github.com/ai-agent-assembly/arena
+edit_uri: edit/main/docs/
+
+# Copyright
+copyright: Copyright &copy; 2026 Agent Assembly Team
+
+theme:
+  name: material
+  features:
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - navigation.footer
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Follow system
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+# Plugins
+plugins:
+  # Built-in client-side search.
+  - search
+  # Doc-as-Code — render Python API reference inline from package docstrings.
+  # `paths: [src]` matches this repo's `src/arena/` layout (see pyproject.toml
+  # `tool.hatch.build.targets.wheel.packages`).
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            docstring_section_style: spacy
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+            relative_crossrefs: true
+            show_source: true
+            show_signature_annotations: true
+            separate_signature: true
+  # Versioning documentation — every main push deploys to "latest", releases
+  # promote to "stable". `deploy_prefix: ''` and `alias_type: symlink` match
+  # python-sdk's mike config so the docs hub's gh-pages-clone aggregation
+  # strategy (AAASM-4413) works identically across both sites.
+  - mike:
+      alias_type: symlink
+      deploy_prefix: ''
+      canonical_version: null
+      version_selector: true
+  # Documentation modification info — per-page "last updated" timestamp.
+  - git-revision-date-localized:
+      type: timeago
+      fallback_to_build_date: false
+      enable_creation_date: true
+      enabled: true
+      strict: true
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: ai-agent-assembly
+      repo: arena
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Additional configuration
+extra:
+  version:
+    provider: mike
+    default: stable
+    alias: true
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ai-agent-assembly/arena
+
+# Page tree
+nav:
+  - Home: index.md
+  - Concepts:
+      - Architecture: architecture.md
+      - Glossary: glossary.md
+      - Behavior Profiles: behavior-profiles.md
+  - Guides:
+      - Running Arena locally: local-execution.md
+      - Runners: runners.md
+      - Submitting an agent: submit-agent.md
+  - Reports:
+      - Report schema: report-schema.md
+      - "Sample: winning match": samples/winning-match/arena-report.md
+      - "Sample: losing match": samples/losing-match/arena-report.md
+  - Security Policy: security-policy.md
+  - API Reference: api-reference.md
