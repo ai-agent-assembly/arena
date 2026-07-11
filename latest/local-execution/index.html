@@ -1301,6 +1301,15 @@ exactly why.</p>
    verdict — <code>TrialOutcome.passed</code> is a real comparison against the trial's
    <code>expected</code> mapping (AAASM-4380), not a proxy.</li>
 </ol>
+<pre class="mermaid"><code>flowchart LR
+    A[Load scenario + discover&lt;br/&gt;agent manifests] --&gt; B{entrypoint.type}
+    B --&gt;|command| C[ProcessRunner:&lt;br/&gt;real subprocess]
+    B --&gt;|docker| D[DockerRunner:&lt;br/&gt;real docker run]
+    C --&gt; E[Capture stdout/stderr/&lt;br/&gt;exit code/duration]
+    D --&gt; E
+    E --&gt; F[parse_action_attempts:&lt;br/&gt;ArenaActionAttempt markers]
+    F --&gt; G[AgentAssemblyClient.decide&lt;br/&gt;per attempt]
+    G --&gt; H[append_audit_event →&lt;br/&gt;audit.jsonl]</code></pre>
 <h3 id="where-output-lands">Where output lands<a class="headerlink" href="#where-output-lands" title="Permanent link">&para;</a></h3>
 <p>Each match creates one workspace directory under <code>--output-root</code> (<code>./runs/</code>
 by default), named <code>&lt;UTC timestamp&gt;-&lt;scenario-id&gt;-&lt;random suffix&gt;</code>. Beneath
@@ -1434,7 +1443,7 @@ satisfy the offset described above).</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 10, 2026 09:15:12 UTC"><span class="timeago" datetime="2026-07-10T09:15:12+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 10, 2026 09:15:12 UTC">2026-07-10</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 11, 2026 06:14:41 UTC"><span class="timeago" datetime="2026-07-11T06:14:41+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 11, 2026 06:14:41 UTC">2026-07-11</span>
   </span>
 
     
