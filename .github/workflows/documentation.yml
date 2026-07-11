@@ -1,0 +1,50 @@
+name: documentation
+
+# PR-triggered runs build-only (never deploy, never touch gh-pages). Pushes
+# to main deploy the "latest" channel to gh-pages via mike, so the docs hub
+# (AAASM-4414) can clone it exactly like it already does for python-sdk.
+#
+# Deliberately out of scope (see AAASM-4411/4413): a release-channel /
+# version-switcher deploy job. arena has no version tags or release workflow
+# yet — that lands in a later ticket once arena starts cutting releases.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# Default to read-only so the PR build-only job inherits least privilege; the
+# deploy job opts back into the write scope it needs.
+permissions:
+  contents: read
+
+# One concurrent deployment so a fast-follow push doesn't race a previous
+# deploy on gh-pages.
+concurrency:
+  group: "docs-pages"
+  cancel-in-progress: true
+
+jobs:
+  build_documentation:
+    name: Build documentation (PR, no deploy)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for mike + git-revision-date plugins)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install docs dependency group
+        run: uv sync --group docs
+
+      # Build-only: validates the site compiles under --strict. No mike
+      # deploy, no push to gh-pages — PRs must never mutate published docs.
+      - name: Build documentation
+        run: uv run mkdocs build --strict
