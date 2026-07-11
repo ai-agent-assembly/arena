@@ -3,8 +3,8 @@
 This document is the PR-based contribution path: forking or branching this
 repo, adding an agent plugin directly under `agents/community/`, and opening
 a pull request. If you'd rather request that an agent be added without
-writing the plugin folder yourself, use the GitHub Issue Form (see
-`CONTRIBUTING.md`) instead — that's a separate, lighter-weight path.
+writing the plugin folder yourself, see [Get involved](get-involved.md)
+instead — that's a separate, lighter-weight path.
 
 See `docs/glossary.md` for precise definitions of the terms used below
 (Agent/Agent Plugin, Manifest, Scenario, Trial, Capabilities), and
