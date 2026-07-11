@@ -48,7 +48,6 @@ flowchart TD
     D --> F[matches/&lt;match-id&gt;/arena-report.md]
     C --> G[matches/&lt;match-id&gt;/audit.jsonl]
     E --> H[refresh_static_index]
-    F --> H
     H --> I[latest.json]
     H --> J[latest.md]
     H --> K[leaderboard.json]
