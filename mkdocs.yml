@@ -134,6 +134,7 @@ extra:
 # Page tree
 nav:
   - Home: index.md
+  - Get Involved: get-involved.md
   - Concepts:
       - Architecture: architecture.md
       - Glossary: glossary.md
