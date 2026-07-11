@@ -10,12 +10,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
-    "typer>=0.12.0,<1.0.0",
-    "rich>=13.7.0,<15.0.0",
-    "pydantic>=2.0.0,<3.0.0",
-    "pyyaml>=6.0,<7.0",
+    "typer>=0.26.8,<1.0.0",
+    "rich>=15.0.0,<16.0.0",
+    "pydantic>=2.13.4,<3.0.0",
+    "pyyaml>=6.0.3,<7.0",
     "langgraph>=1.2.9",
-    "pydantic-ai-slim>=2.8.0,<3.0.0",
+    "pydantic-ai-slim>=2.9.0,<3.0.0",
 ]
 
 [project.scripts]
@@ -27,20 +27,20 @@ Repository = "https://github.com/ai-agent-assembly/arena"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.1.0,<9.0.0",
-    "ruff>=0.6.0,<1.0.0",
-    "mypy>=1.11.0,<2.0.0",
-    "types-pyyaml>=6.0,<7.0",
+    "pytest>=9.1.1,<10.0.0",
+    "ruff>=0.15.21,<1.0.0",
+    "mypy>=2.2.0,<3.0.0",
+    "types-pyyaml>=6.0.12.20260518,<7.0",
 ]
 docs = [
-    "mkdocs>=1.6.0,<2",
-    "mkdocs-material>=9.5.0,<10",
-    "mkdocstrings>=0.24.0,<2",
-    "mkdocstrings-python>=1.10.0,<3",
-    "mike>=2.1.0,<3",
-    "mkdocs-autorefs>=1.0.0,<2",
-    "mkdocs-git-revision-date-localized-plugin>=1.2.0,<2",
-    "mkdocs-git-authors-plugin>=0.9.0,<1",
+    "mkdocs>=1.6.1,<2",
+    "mkdocs-material>=9.7.6,<10",
+    "mkdocstrings>=1.0.5,<2",
+    "mkdocstrings-python>=2.0.5,<3",
+    "mike>=2.2.0,<3",
+    "mkdocs-autorefs>=1.4.4,<2",
+    "mkdocs-git-authors-plugin>=0.10.0,<1",
+    "mkdocs-git-revision-date-localized-plugin>=1.5.3,<2",
 ]
 
 [tool.hatch.build.targets.wheel]
