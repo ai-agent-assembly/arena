@@ -19,7 +19,7 @@ reports/
         └── audit.jsonl            # generated — the match's redacted audit trail
 ```
 
-Everything under `reports/` other than `README.md` is **generated output**, not source.
+Everything under `reports/` other than `README.md` is **generated output**, not hand-authored — but it is tracked in git: a scheduled GitHub Actions workflow (`.github/workflows/scheduled-matches.yml`, AAASM-4428) refreshes and commits it on a cadence, so `reports/` on `main` stays a real, recent match history rather than a one-time snapshot.
 
 ## Stable, consumer-facing files
 

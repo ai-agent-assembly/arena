@@ -110,6 +110,8 @@ def test_local_run_smoke_completes_end_to_end(tmp_path: Path) -> None:
             str(community_root),
             "--output-root",
             str(output_root),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
         ],
     )
 
