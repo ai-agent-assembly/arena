@@ -1,0 +1,105 @@
+name: documentation
+
+# PR-triggered runs build-only (never deploy, never touch gh-pages). Pushes
+# to main deploy the "latest" channel to gh-pages via mike, so the docs hub
+# (AAASM-4414) can clone it exactly like it already does for python-sdk.
+#
+# Deliberately out of scope (see AAASM-4411/4413): a release-channel /
+# version-switcher deploy job. arena has no version tags or release workflow
+# yet — that lands in a later ticket once arena starts cutting releases.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  # Operator-driven, on-demand republish of the "latest" channel — no code
+  # push required. Reuses the exact same deploy steps as the push trigger.
+  workflow_dispatch: {}
+
+# Default to read-only so the PR build-only job inherits least privilege; the
+# deploy job opts back into the write scope it needs.
+permissions:
+  contents: read
+
+# One concurrent deployment so a fast-follow push doesn't race a previous
+# deploy on gh-pages.
+concurrency:
+  group: "docs-pages"
+  cancel-in-progress: true
+
+jobs:
+  build_documentation:
+    name: Build documentation (PR, no deploy)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for mike + git-revision-date plugins)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install docs dependency group
+        run: uv sync --group docs
+
+      # Build-only: validates the site compiles under --strict. No mike
+      # deploy, no push to gh-pages — PRs must never mutate published docs.
+      - name: Build documentation
+        run: uv run mkdocs build --strict
+
+  deploy_latest_documentation:
+    name: Deploy latest documentation
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (full history for mike + git-revision-date plugins)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install docs dependency group
+        run: uv sync --group docs
+
+      - name: Configure git identity for the gh-pages deploy commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Make gh-pages locally known before mike pushes to it. Harmless no-op
+      # on the very first-ever deploy, when the branch doesn't exist yet.
+      - name: Fetch existing gh-pages branch (if any)
+        run: git fetch origin gh-pages --depth=1 || true
+
+      # Pre-flight: fail fast if the build itself is broken before touching
+      # gh-pages.
+      - name: Build documentation (pre-flight)
+        run: uv run mkdocs build --strict
+
+      # Publish "latest" to gh-pages. --update-aliases lets mike reclaim
+      # "latest" as a concrete version if older gh-pages state ever carried
+      # it as an alias instead (mirrors python-sdk's deploy step).
+      - name: Deploy latest documentation
+        run: uv run mike deploy --push --update-aliases --title "latest (main)" latest
+
+      # arena has no release workflow / version tags yet, so mkdocs.yml's
+      # `extra.version.default: stable` alias (mirrored from python-sdk's
+      # config in AAASM-4412) is never created. Point the gh-pages root
+      # redirect at "latest" instead, so the standalone gh-pages site and
+      # the docs hub aggregation (AAASM-4414) both resolve instead of
+      # 404ing on a "stable" alias that won't exist until a release-channel
+      # job is added in a future ticket.
+      - name: Set default gh-pages redirect to "latest"
+        run: uv run mike set-default --push latest
