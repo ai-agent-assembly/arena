@@ -73,6 +73,8 @@ def test_run_smoke_scenario_succeeds(tmp_path: Path) -> None:
             str(community_root),
             "--output-root",
             str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
         ],
     )
 
@@ -98,6 +100,8 @@ def test_run_unknown_scenario_exits_nonzero(tmp_path: Path) -> None:
             str(tmp_path / "agents" / "community"),
             "--output-root",
             str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
         ],
     )
 
@@ -128,6 +132,8 @@ def test_run_agent_filter_selects_only_that_agent(tmp_path: Path) -> None:
             str(community_root),
             "--output-root",
             str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
         ],
     )
 
@@ -156,6 +162,8 @@ def test_run_default_adapter_is_fake_and_succeeds(tmp_path: Path) -> None:
             str(community_root),
             "--output-root",
             str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
             "--adapter",
             "fake",
         ],
@@ -181,6 +189,8 @@ def test_run_unknown_adapter_exits_nonzero(tmp_path: Path) -> None:
             str(tmp_path / "agents" / "community"),
             "--output-root",
             str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
             "--adapter",
             "quantum",
         ],
@@ -207,6 +217,8 @@ def test_run_real_adapter_exits_nonzero_not_implemented(tmp_path: Path) -> None:
             str(tmp_path / "agents" / "community"),
             "--output-root",
             str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
             "--adapter",
             "real",
         ],
@@ -269,6 +281,8 @@ def test_run_github_maintainer_dungeon_smoke_with_official_agent(tmp_path: Path)
             str(REAL_COMMUNITY_ROOT),
             "--output-root",
             str(output_root),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
         ],
     )
 
