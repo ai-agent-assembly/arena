@@ -39,6 +39,21 @@ Each of these carries its own `schema_version` field — check it before assumin
 
 `aasm-arena run <scenario-id>` writes a new `matches/<match-id>/` directory (`arena.reports.generate.generate_report`) and then refreshes `latest.json`, `latest.md`, and `leaderboard.json` (`arena.reports.index.refresh_static_index`) from whatever's on disk under `matches/` at that point — so the static index is always consistent with the full match history, not just the match that was just run.
 
+```mermaid
+flowchart TD
+    A[run_match → MatchResult] --> B[score_match → MatchScore]
+    B --> C[generate_report]
+    C --> D[build_report → MatchReport]
+    D --> E[matches/&lt;match-id&gt;/arena-report.json]
+    D --> F[matches/&lt;match-id&gt;/arena-report.md]
+    C --> G[matches/&lt;match-id&gt;/audit.jsonl]
+    E --> H[refresh_static_index]
+    F --> H
+    H --> I[latest.json]
+    H --> J[latest.md]
+    H --> K[leaderboard.json]
+```
+
 ## Sample reports
 
 Two deterministic sample match reports — a win and a loss — are checked into this site so you can see the report shape without running a match yourself:
