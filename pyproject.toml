@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
     "typer>=0.12.0,<1.0.0",
-    "rich>=13.7.0,<15.0.0",
+    "rich>=13.7.0,<16.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "pyyaml>=6.0,<7.0",
     "langgraph>=1.2.9",
@@ -27,9 +27,9 @@ Repository = "https://github.com/ai-agent-assembly/arena"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.1.0,<9.0.0",
+    "pytest>=8.1.0,<10.0.0",
     "ruff>=0.6.0,<1.0.0",
-    "mypy>=1.11.0,<2.0.0",
+    "mypy>=1.11.0,<3.0.0",
     "types-pyyaml>=6.0,<7.0",
 ]
 docs = [
