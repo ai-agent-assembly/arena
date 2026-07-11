@@ -32,6 +32,24 @@ Arena's own audit/report pipeline (`arena.integrations.decision`,
 a real agent-assembly connector whenever one is built — honors this minimal
 contract for every governed action attempt:
 
+```mermaid
+sequenceDiagram
+    participant Agent as Agent process
+    participant Match as arena.runner.match.run_match
+    participant Client as AgentAssemblyClient
+    participant Audit as audit.jsonl (ArenaAuditEvent)
+
+    Agent->>Match: ArenaActionAttempt (stdout marker)
+    Match->>Client: decide(attempt)
+    alt decision available
+        Client-->>Match: DefenseDecision(effect, layer, reason, severity)
+        Match->>Audit: ArenaAuditEvent.for_decision(...)
+    else no decision configured for this attempt
+        Client-->>Match: raise MissingDecisionError
+        Match->>Audit: ArenaAuditEvent.for_missing_decision(...)
+    end
+```
+
 - **Every attempt gets exactly one decision, or is treated as a failure.**
   There is no third option. An `AgentAssemblyClient.decide()` call either
   returns a `DefenseDecision`, or raises `MissingDecisionError` — it must
