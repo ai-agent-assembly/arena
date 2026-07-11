@@ -225,10 +225,12 @@ __marimo__/
 # `--output-root`) — generated output, not source.
 /runs/
 
-# AAASM-4390: default match report artifact root (`aasm-arena run`'s
-# `--reports-root`) — generated output, not source. Ignore contents only
-# (not the directory itself), so AAASM-4397's checked-in `reports/README.md`
-# (documenting the static artifact layout) can be un-ignored below — a
-# parent-directory ignore rule would otherwise make that override impossible.
-/reports/*
-!/reports/README.md
+# AAASM-4390/4397: `reports/` (default `aasm-arena run` `--reports-root`
+# parent) holds generated output — `latest.json`/`latest.md`/
+# `leaderboard.json`/`matches/<match-id>/…` — but as of AAASM-4428 it is
+# deliberately NOT ignored: the `scheduled-matches` GitHub Actions workflow
+# commits refreshed copies of these files back to `main` on a cadence so a
+# docs/website consumer can fetch them directly from the repo, so they need
+# to be trackable like any other versioned file (a local `aasm-arena run`
+# will show them as real working-tree changes too, same as the CI workflow
+# does — see `reports/README.md` and `.github/workflows/scheduled-matches.yml`).

@@ -19,7 +19,7 @@ reports/
         └── audit.jsonl            # generated — the match's redacted audit trail
 ```
 
-Everything under `reports/` other than `README.md` is **generated output**, not source.
+Everything under `reports/` other than `README.md` is **generated output**, not hand-authored — but it is tracked in git: a scheduled GitHub Actions workflow (`.github/workflows/scheduled-matches.yml`, AAASM-4428) refreshes and commits it on a cadence, so `reports/` on `main` stays a real, recent match history rather than a one-time snapshot.
 
 ## Stable, consumer-facing files
 
@@ -38,6 +38,20 @@ Each of these carries its own `schema_version` field — check it before assumin
 ## How this gets (re)generated
 
 `aasm-arena run <scenario-id>` writes a new `matches/<match-id>/` directory (`arena.reports.generate.generate_report`) and then refreshes `latest.json`, `latest.md`, and `leaderboard.json` (`arena.reports.index.refresh_static_index`) from whatever's on disk under `matches/` at that point — so the static index is always consistent with the full match history, not just the match that was just run.
+
+```mermaid
+flowchart TD
+    A[run_match → MatchResult] --> B[score_match → MatchScore]
+    B --> C[generate_report]
+    C --> D[build_report → MatchReport]
+    D --> E[matches/&lt;match-id&gt;/arena-report.json]
+    D --> F[matches/&lt;match-id&gt;/arena-report.md]
+    C --> G[matches/&lt;match-id&gt;/audit.jsonl]
+    E --> H[refresh_static_index]
+    H --> I[latest.json]
+    H --> J[latest.md]
+    H --> K[leaderboard.json]
+```
 
 ## Sample reports
 

@@ -88,6 +88,18 @@ exactly why.
    verdict — `TrialOutcome.passed` is a real comparison against the trial's
    `expected` mapping (AAASM-4380), not a proxy.
 
+```mermaid
+flowchart LR
+    A[Load scenario + discover<br/>agent manifests] --> B{entrypoint.type}
+    B -->|command| C[ProcessRunner:<br/>real subprocess]
+    B -->|docker| D[DockerRunner:<br/>real docker run]
+    C --> E[Capture stdout/stderr/<br/>exit code/duration]
+    D --> E
+    E --> F[parse_action_attempts:<br/>ArenaActionAttempt markers]
+    F --> G[AgentAssemblyClient.decide<br/>per attempt]
+    G --> H[append_audit_event →<br/>audit.jsonl]
+```
+
 ### Where output lands
 
 Each match creates one workspace directory under `--output-root` (`./runs/`

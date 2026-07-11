@@ -16,6 +16,8 @@ copyright: Copyright &copy; 2026 Agent Assembly Team
 
 theme:
   name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   features:
     - content.action.edit
     - content.code.annotate
@@ -84,6 +86,12 @@ plugins:
       enable_creation_date: true
       enabled: true
       strict: true
+  # Documentation modification info — per-page author from local git history.
+  - git-authors:
+      show_contribution: false
+      show_line_count: false
+      show_email_address: false
+      sort_authors_by: contribution
 
 # Extensions
 markdown_extensions:
@@ -114,7 +122,11 @@ markdown_extensions:
       repo: arena
   - pymdownx.mark
   - pymdownx.smartsymbols
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -134,6 +146,7 @@ extra:
 # Page tree
 nav:
   - Home: index.md
+  - Get Involved: get-involved.md
   - Concepts:
       - Architecture: architecture.md
       - Glossary: glossary.md

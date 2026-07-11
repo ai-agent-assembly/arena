@@ -1,0 +1,140 @@
+name: Scheduled Arena Matches
+
+# Runs real Arena matches (AAASM-4428) on a schedule so `reports/`
+# (latest.json, leaderboard.json, matches/<match-id>/…) reflects genuine,
+# recently-run match results instead of sitting frozen at whatever the last
+# manual `aasm-arena run` happened to produce. The two hand-generated static
+# fixtures under `docs/samples/` are unaffected — those stay as deterministic,
+# always-available examples of the report shape (see
+# `scripts/generate_report_samples.py`), independent of this workflow.
+#
+# Loop-avoidance (two layers):
+#   1. Primary: this workflow's report-refresh commit is pushed using the
+#      job's own default `GITHUB_TOKEN` (via `actions/checkout`'s persisted
+#      credentials). GitHub does not queue new workflow runs for pushes/PRs
+#      made with the GITHUB_TOKEN itself (see "Triggering a workflow from a
+#      workflow" in GitHub's docs on automatic token authentication) — so
+#      this push cannot cause `ci.yml`/`documentation.yml` (both
+#      `push: branches: [main]`) to run at all, regardless of what changed.
+#   2. Defense in depth: the commit message also carries `[skip ci]`, which
+#      GitHub recognizes repo-wide for any `push`/`pull_request`-triggered
+#      workflow. This keeps the same guarantee even if this workflow is ever
+#      changed to push with a PAT instead of `GITHUB_TOKEN` (which *would*
+#      otherwise be able to trigger other workflows).
+#   3. This workflow itself only listens to `schedule`/`workflow_dispatch` —
+#      it is never `push`-triggered — so there is no path back into itself
+#      either way.
+on:
+  schedule:
+    # Once a day. Arena's official-agent matrix is small (5 agents x the one
+    # registered scenario today) and deterministic (`--adapter fake`, the
+    # CLI default), so there's no need for a tighter cadence yet — revisit if
+    # a real (non-fake) adapter or a larger scenario/agent matrix makes more
+    # frequent runs meaningful.
+    - cron: "23 7 * * *"
+  # Manual trigger — useful for testing this workflow, or for refreshing
+  # reports/ on demand without waiting for the next scheduled run.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Serialize runs so two overlapping matrices never race to commit/push the
+# same `reports/` refresh (a canceled mid-push run could leave main in a
+# half-committed state, so runs queue rather than cancel each other).
+concurrency:
+  group: scheduled-matches
+  cancel-in-progress: false
+
+jobs:
+  run-matches:
+    name: Run scheduled Arena matches and refresh report index
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      # One `aasm-arena run --agent <id>` per official agent — see
+      # agents/official/*/agent.yaml's `scenarios:` list: every official
+      # agent today declares only `github-maintainer-dungeon`, so the real
+      # eligibility matrix is "5 agents x that one scenario," not a blind
+      # 5-agents-x-every-scenario cross product (`AgentRegistry.filter
+      # (scenario=...)` is what `aasm-arena run` itself uses to decide
+      # compatibility — see `arena.registry.discovery`). Agent ids are
+      # spelled out individually rather than discovered via a glob over
+      # `agents/official/*` (and `agents/community/*` is never referenced at
+      # all) so a new/renamed official agent — or any community submission —
+      # can't silently join this scheduled matrix unreviewed.
+      #
+      # `continue-on-error: true` on each: a match "losing" (an attack
+      # getting through, `aasm-arena run` exiting non-zero) is a legitimate,
+      # meaningful Arena result worth recording, not a workflow
+      # infrastructure failure — see docs/local-execution.md's "What's
+      # mocked vs. real" section. A non-zero exit here still shows as a
+      # warning in the run summary, but later steps (crucially, the report
+      # commit below) always run regardless.
+      - name: Run github-maintainer-dungeon — raw-python-issue-triager
+        continue-on-error: true
+        run: uv run aasm-arena run github-maintainer-dungeon --agent raw-python-issue-triager
+
+      - name: Run github-maintainer-dungeon — langgraph-docs-agent
+        continue-on-error: true
+        run: uv run aasm-arena run github-maintainer-dungeon --agent langgraph-docs-agent
+
+      - name: Run github-maintainer-dungeon — ci-debug-agent
+        continue-on-error: true
+        run: uv run aasm-arena run github-maintainer-dungeon --agent ci-debug-agent
+
+      - name: Run github-maintainer-dungeon — release-agent
+        continue-on-error: true
+        run: uv run aasm-arena run github-maintainer-dungeon --agent release-agent
+
+      - name: Run github-maintainer-dungeon — mock-malicious-agent
+        continue-on-error: true
+        run: uv run aasm-arena run github-maintainer-dungeon --agent mock-malicious-agent
+
+      # Matches documentation.yml's deploy job's git identity for bot commits.
+      - name: Configure git identity for the report refresh commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Check for report changes
+        id: report_status
+        run: |
+          git add reports
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only commit/push when something under reports/ actually changed —
+      # e.g. every match above unexpectedly erroring before writing a report
+      # should not produce an empty, no-op commit.
+      #
+      # Pushes back to whatever ref this run actually checked out
+      # (`github.ref_name`) rather than a hardcoded `main`: on `schedule`
+      # that's always the default branch, but on `workflow_dispatch` it's
+      # whichever branch was selected — so a manual test run dispatched
+      # against a feature branch commits its report refresh there instead
+      # of accidentally landing on `main`.
+      - name: Commit and push refreshed reports
+        if: steps.report_status.outputs.changed == 'true'
+        env:
+          TARGET_REF: ${{ github.ref_name }}
+        run: |
+          git commit -m "🔧 (reports): Refresh live match reports [skip ci]"
+          git pull --rebase origin "$TARGET_REF"
+          git push origin "HEAD:$TARGET_REF"

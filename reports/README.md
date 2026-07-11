@@ -8,10 +8,19 @@ whatever hosts this directory (or a copy of it, e.g. a CI artifact / GitHub
 Pages / object storage bucket).
 
 Everything under `reports/` other than this `README.md` is **generated
-output**, not source — see `.gitignore`. This file exists to document the
-shape of that generated output so a consumer doesn't have to read Arena's
-source to know what to expect. It is intentionally checked into the repo
-despite the rest of `reports/` being ignored.
+output**, written by `aasm-arena run` — not hand-authored. This file exists
+to document the shape of that generated output so a consumer doesn't have to
+read Arena's source to know what to expect.
+
+Unlike most generated output, it is **tracked in git**: the
+`scheduled-matches` GitHub Actions workflow
+(`.github/workflows/scheduled-matches.yml`, AAASM-4428) runs real matches on
+a schedule (and on manual `workflow_dispatch`) and commits the refreshed
+`latest.json`/`latest.md`/`leaderboard.json`/`matches/` back to `main`, so
+`reports/` on `main` always reflects a real, recent match history a
+docs/website consumer can fetch directly — no CI artifact download, no
+backend service, no Arena installation required. See `.gitignore` for the
+(deliberately absent) ignore rule.
 
 ## Layout
 
@@ -118,3 +127,10 @@ history, not just the match that was just run.
 `refresh_static_index` is also callable standalone (it takes only the
 `matches/` root path) to rebuild the index without running a match — e.g.
 after manually adding/removing a `matches/<match-id>/` directory.
+
+In CI, `.github/workflows/scheduled-matches.yml` runs `aasm-arena run
+github-maintainer-dungeon --agent <id>` once per official agent (daily, plus
+on-demand via `workflow_dispatch`) and commits whatever changed under
+`reports/` back to `main` with a `github-actions[bot]` commit — see that
+workflow file for exactly which agents run and how it avoids re-triggering
+`ci.yml`/`documentation.yml` on its own commit.
