@@ -14,6 +14,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from arena.integrations.audit import ArenaAuditEvent
 from arena.integrations.decision import DefenseDecision
 from arena.integrations.models import ArenaActionAttempt
@@ -342,7 +344,7 @@ def test_build_execution_metadata_defaults_to_mock_deterministic_zero_cost(tmp_p
     assert execution.llm_mode is LLMMode.MOCK
     assert execution.deterministic is True
     assert execution.external_model_calls == 0
-    assert execution.estimated_cost_usd == 0.0
+    assert execution.estimated_cost_usd == pytest.approx(0.0)
 
 
 def test_build_execution_metadata_replay_mode_is_also_deterministic_zero_cost(
@@ -365,7 +367,7 @@ def test_build_execution_metadata_replay_mode_is_also_deterministic_zero_cost(
     assert execution.llm_mode is LLMMode.REPLAY
     assert execution.deterministic is True
     assert execution.external_model_calls == 0
-    assert execution.estimated_cost_usd == 0.0
+    assert execution.estimated_cost_usd == pytest.approx(0.0)
 
 
 def test_build_execution_metadata_live_mode_is_marked_non_deterministic(tmp_path: Path) -> None:
@@ -402,7 +404,7 @@ def test_build_execution_metadata_live_mode_reflects_configured_budget_guards(
     execution = build_execution_metadata(match_result)
 
     assert execution.external_model_calls == 5
-    assert execution.estimated_cost_usd == 1.25
+    assert execution.estimated_cost_usd == pytest.approx(1.25)
 
 
 def test_build_execution_metadata_live_mode_without_budget_guards_is_null(
