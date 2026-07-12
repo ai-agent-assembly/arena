@@ -104,6 +104,20 @@ jobs:
         continue-on-error: true
         run: uv run aasm-arena run github-maintainer-dungeon --agent mock-malicious-agent
 
+      # AAASM-4398: upload this run's refreshed reports/ as a native Actions
+      # artifact, distinct from the git commit below. The commit is the
+      # durable, versioned entry point a docs/website consumer fetches from
+      # `main`; this artifact instead lets a maintainer grab exactly what
+      # one specific workflow run produced (e.g. a match's audit.jsonl)
+      # straight from that run's summary page, without checking out git
+      # history or waiting on the commit-and-push step to land.
+      - name: Upload match reports as workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v7.0.1
+        with:
+          name: arena-match-reports-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+
       # Matches documentation.yml's deploy job's git identity for bot commits.
       - name: Configure git identity for the report refresh commit
         run: |
