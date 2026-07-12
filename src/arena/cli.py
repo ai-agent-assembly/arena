@@ -23,6 +23,7 @@ from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
 from arena.reports.generate import generate_report
 from arena.reports.index import refresh_static_index
 from arena.reports.scoring import score_match
+from arena.runner.llm_mode import LLMMode
 from arena.runner.match import AUDIT_LOG_FILENAME, MatchConfig, MatchOrchestrationError, run_match
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
 
@@ -101,6 +102,15 @@ def run_command(
         help="Which agent-assembly adapter to use: 'fake' (default, deterministic "
         "backend) or 'real' (not yet implemented — out of scope for AAASM-4377).",
     ),
+    llm_mode: str = typer.Option(
+        "mock",
+        "--llm-mode",
+        help="Which LLM execution mode agents run under (AAASM-4405): 'mock' "
+        "(default, zero paid model API calls), 'replay' (also zero paid model "
+        "API calls — replays previously recorded model responses), or 'live' "
+        "(real, paid model API calls; requires AASM_ARENA_LIVE_LLM=true to be "
+        "set explicitly, and is never set by this repo's own CI workflows).",
+    ),
 ) -> None:
     """Run a match: select compatible agents, run every scenario trial, print a summary.
 
@@ -120,6 +130,14 @@ def run_command(
     `arena.integrations.adapter`) the run uses to decide every attempted
     action; it's validated and stored on `MatchConfig.adapter`, then
     consumed by `run_match` for every trial.
+
+    `--llm-mode` selects which LLM execution mode (AAASM-4405,
+    `arena.runner.llm_mode`) the run's agents operate under; it's validated
+    and stored on `MatchConfig.llm_mode`, then enforced by `run_match` before
+    anything else runs — `'live'` is rejected unless `AASM_ARENA_LIVE_LLM=true`
+    is set, which keeps it out of ordinary and PR/fork CI runs by
+    construction (see `docs/local-execution.md`'s "LLM execution mode
+    policy" section).
 
     The final verdict comes from `score_match(result, result.scenario,
     read_audit_events(...))` rather than comparing
@@ -155,6 +173,16 @@ def run_command(
         console.print(f"[bold red]✗[/bold red] {escape(str(exc))}")
         raise typer.Exit(code=1) from exc
 
+    try:
+        llm_mode_choice = LLMMode(llm_mode)
+    except ValueError:
+        valid = ", ".join(choice.value for choice in LLMMode)
+        console.print(
+            f"[bold red]✗[/bold red] invalid --llm-mode {escape(llm_mode)!r}: "
+            f"must be one of {escape(valid)}"
+        )
+        raise typer.Exit(code=1) from None
+
     config = MatchConfig(
         scenarios_root=scenarios_root,
         official_root=official_root,
@@ -162,6 +190,7 @@ def run_command(
         output_root=output_root,
         reports_root=reports_root,
         adapter=adapter_choice,
+        llm_mode=llm_mode_choice,
     )
     try:
         result = run_match(scenario_id, config, agent_id=agent)
