@@ -163,6 +163,65 @@ exit code, and `audit.jsonl` are the only output.
   it is no longer part of `default_runner_registry()` — a real `aasm-arena
   run` invocation never uses it.
 
+## LLM execution mode policy
+
+`aasm-arena run --llm-mode` (AAASM-4405, `arena.runner.llm_mode`) controls
+how a match's agents are allowed to interact with LLMs. It's a separate knob
+from `--adapter` (which selects the `AgentAssemblyClient` that renders
+governance decisions) — `--llm-mode` is about whether agents make real model
+calls at all.
+
+| Mode | Default | Real, paid model API calls | Notes |
+|---|---|---|---|
+| `mock` | Yes | Never | Deterministic/canned model behavior. |
+| `replay` | No | Never | Replays previously recorded model responses. |
+| `live` | No | Only mode that may | Requires explicit opt-in — see below. |
+
+`mock` is the default so Arena stays deterministic and zero-cost unless a
+caller explicitly asks for something else. Today this is true by
+construction, not just by policy: no official agent
+(`agents/official/*/main.py`) makes a real model call at all — `ci-debug-agent`
+uses `pydantic_ai.models.test.TestModel`, and every other official agent is a
+plain scripted `raw-python`/`langgraph` persona with no LLM in the loop (see
+each agent's own module docstring). All five official agents therefore run
+in `mock` mode with no external credentials required.
+
+**`live` mode is gated behind explicit opt-in.** Requesting `--llm-mode live`
+(or constructing a `MatchConfig(llm_mode=LLMMode.LIVE, ...)` directly) is
+rejected with a clear error unless the environment variable
+`AASM_ARENA_LIVE_LLM` is set to the literal string `true`:
+
+```bash
+$ uv run aasm-arena run github-maintainer-dungeon --llm-mode live
+✗ llm_mode 'live' requires AASM_ARENA_LIVE_LLM=true to be set explicitly —
+  refusing to make real, paid model API calls without opt-in
+
+$ AASM_ARENA_LIVE_LLM=true uv run aasm-arena run github-maintainer-dungeon --llm-mode live
+# proceeds
+```
+
+This gate is enforced by `run_match` itself (`arena.runner.match.run_match`
+calls `arena.runner.llm_mode.validate_llm_mode` before doing any other
+work), not just by the CLI, so it holds for any direct caller of the Python
+API too.
+
+**Why this keeps `live` mode out of PR/fork CI by construction.** None of
+this repo's GitHub Actions workflows (`ci.yml`, `validate-community-agents.yml`,
+`scheduled-matches.yml`) set `AASM_ARENA_LIVE_LLM` — and
+`validate-community-agents.yml`, the one workflow that runs against
+untrusted fork PR content, never invokes `aasm-arena run` at all (it only
+runs `aasm-arena agents validate`, which parses manifests and never executes
+an agent's declared entrypoint). A single env-var gate is therefore
+sufficient: there is no code path in this repo's own workflows that both
+runs a match *and* sets the opt-in variable.
+
+**Budget guards.** `MatchConfig` also carries two optional fields,
+`max_live_calls: int | None` and `max_cost_usd: float | None`, consulted
+only when `llm_mode` is `live`. These are deliberately just data today, not
+an enforcement mechanism — no caller reads them yet — so `MatchConfig`'s
+live-mode shape doesn't need a breaking change once real cost tracking
+lands.
+
 ## Troubleshooting
 
 **"Docker not installed" / daemon not running.** `DockerRunner` only

@@ -6,6 +6,7 @@ import json
 import re
 import shlex
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from arena.integrations.decision import DefenseDecision
 from arena.models.scenario import Decision, Severity, TrialSpec
 from arena.registry.discovery import discover_agents
 from arena.runner.events import MatchEvent, MatchEventType
+from arena.runner.llm_mode import LIVE_LLM_ENV_VAR, LLMMode
 from arena.runner.match import (
     MatchConfig,
     MatchOrchestrationError,
@@ -114,6 +116,38 @@ def test_match_config_adapter_is_settable(tmp_path: Path) -> None:
     assert config.adapter is AdapterChoice.REAL
 
 
+# --- MatchConfig.llm_mode (AAASM-4405) --------------------------------------
+
+
+def test_match_config_defaults_to_mock_llm_mode(match_config: MatchConfig) -> None:
+    assert match_config.llm_mode is LLMMode.MOCK
+
+
+def test_match_config_llm_mode_is_settable(tmp_path: Path) -> None:
+    config = MatchConfig(output_root=tmp_path / "runs", llm_mode=LLMMode.REPLAY)
+
+    assert config.llm_mode is LLMMode.REPLAY
+
+
+def test_match_config_budget_guard_fields_default_to_none(tmp_path: Path) -> None:
+    config = MatchConfig(output_root=tmp_path / "runs")
+
+    assert config.max_live_calls is None
+    assert config.max_cost_usd is None
+
+
+def test_match_config_budget_guard_fields_are_settable(tmp_path: Path) -> None:
+    config = MatchConfig(
+        output_root=tmp_path / "runs",
+        llm_mode=LLMMode.LIVE,
+        max_live_calls=10,
+        max_cost_usd=5.0,
+    )
+
+    assert config.max_live_calls == 10
+    assert config.max_cost_usd == 5.0
+
+
 # --- generate_match_id ------------------------------------------------------
 
 
@@ -185,6 +219,47 @@ def test_run_match_no_compatible_agents_raises(match_config: MatchConfig, tmp_pa
 
     with pytest.raises(MatchOrchestrationError, match="no registered agents"):
         run_match("lonely-scenario", match_config)
+
+
+# --- run_match: llm_mode live-mode gating (AAASM-4405) ----------------------
+
+
+def test_run_match_live_llm_mode_rejected_without_env_var(
+    match_config: MatchConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(LIVE_LLM_ENV_VAR, raising=False)
+    live_config = replace(match_config, llm_mode=LLMMode.LIVE)
+
+    with pytest.raises(MatchOrchestrationError, match=LIVE_LLM_ENV_VAR):
+        run_match("test-scenario", live_config)
+
+
+def test_run_match_live_llm_mode_rejected_before_any_scenario_loading(
+    match_config: MatchConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The live-mode gate runs before scenario loading, so an unknown
+    # scenario id doesn't change the error a caller sees — live-mode
+    # rejection is unconditional, not contingent on the rest of the match
+    # setup succeeding.
+    monkeypatch.delenv(LIVE_LLM_ENV_VAR, raising=False)
+    live_config = replace(match_config, llm_mode=LLMMode.LIVE)
+
+    with pytest.raises(MatchOrchestrationError, match=LIVE_LLM_ENV_VAR):
+        run_match("does-not-exist", live_config)
+
+
+def test_run_match_live_llm_mode_allowed_with_env_var_set(
+    match_config: MatchConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(LIVE_LLM_ENV_VAR, "true")
+    live_config = replace(match_config, llm_mode=LLMMode.LIVE)
+
+    # Live mode is now permitted; the run proceeds to real match
+    # orchestration (no official agent makes a real model call today, so
+    # this exercises only the policy gate itself, not any live-call path).
+    result = run_match("test-scenario", live_config)
+
+    assert result.trial_outcomes
 
 
 # --- run_match: behavior_id cross-referential validation (AAASM-4404) --------
