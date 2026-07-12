@@ -112,7 +112,7 @@ jobs:
       # straight from that run's summary page, without checking out git
       # history or waiting on the commit-and-push step to land.
       - name: Upload match reports as workflow artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: arena-match-reports-${{ github.run_id }}
           path: reports/
