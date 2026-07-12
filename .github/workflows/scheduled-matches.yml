@@ -143,6 +143,27 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      # AAASM-4505: capture which arena-report.json files this run itself
+      # produced, *before* `git add` below stages them — a freshly written
+      # report is untracked (`git status --porcelain`'s `??` prefix) at this
+      # point, and every match_id is timestamp-derived (see
+      # `arena.reports.generate.generate_report`) so a new report from this
+      # run is always a new path, never a modification of an existing one.
+      # Capturing the list here (rather than after the commit step below)
+      # means live issue creation doesn't depend on the commit/push actually
+      # succeeding — the report files already exist on disk in this job
+      # regardless of git state.
+      - name: Identify this run's new match reports
+        id: new_reports
+        run: |
+          files=$(git status --porcelain --untracked-files=all -- reports/matches \
+            | awk '{print $2}' | grep -E 'arena-report\.json$' || true)
+          {
+            echo "files<<ARENA_REPORTS_EOF"
+            echo "$files"
+            echo "ARENA_REPORTS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check for report changes
         id: report_status
         run: |
@@ -171,3 +192,54 @@ jobs:
           git commit -m "🔧 (reports): Refresh live match reports [skip ci]"
           git pull --rebase origin "$TARGET_REF"
           git push origin "HEAD:$TARGET_REF"
+
+      # AAASM-4505: file real GitHub issues for every real defeat this run's
+      # matches produced (`arena.reports.github_issues`, via `aasm-arena
+      # reports defeat-issues --no-dry-run`), routed per
+      # `arena/reports/defeat_routing.yaml` — most categories route to
+      # `ai-agent-assembly/agent-assembly`, a different repo than this one.
+      # Fingerprint-based duplicate detection (see that module's docstring)
+      # means a repeat defeat across runs skips creating a second issue.
+      #
+      # Runs against `steps.new_reports.outputs.files` — the report(s) this
+      # run itself just wrote (captured above, before `git add`) — never
+      # against every report this repo has ever accumulated, and never for a
+      # winning match's report (`aasm-arena reports defeat-issues` makes zero
+      # GitHub API calls when a report has no defeats — see
+      # `arena.reports.github_issues.create_issues_for_report`).
+      #
+      # This step (and therefore live issue creation) is reachable only from
+      # this workflow, which is `schedule`/`workflow_dispatch`-triggered
+      # only (see the top of this file) — it never runs on `pull_request`,
+      # so a fork/PR can't trigger real issue creation.
+      #
+      # Requires the `ARENA_DEFEAT_ISSUE_TOKEN` repository secret — a
+      # dedicated token with `issues:write` on *both* this repo and
+      # `ai-agent-assembly/agent-assembly` (the default per-repo
+      # `GITHUB_TOKEN` cannot grant access to a different repo, which is why
+      # this doesn't just reuse the `permissions:` block above). `gh` reads
+      # this from the `GH_TOKEN` env var below; see `reports/README.md` for
+      # how to configure that secret — it is a manual, one-time,
+      # repo-admin action, not something this workflow or its code sets up.
+      # Until it's configured, `aasm-arena reports defeat-issues
+      # --no-dry-run` fails clearly (see
+      # `arena.reports.github_issues.GitHubIssueCreationError`) rather than
+      # silently skipping issue creation.
+      #
+      # `continue-on-error: true` mirrors the same reasoning the match-run
+      # steps above use: a problem here (missing/expired token, GitHub API
+      # hiccup) must not block this run's primary job — landing the
+      # `reports/` commit above — but still shows up as a failed step in the
+      # run summary rather than being silently swallowed.
+      - name: File live GitHub issues for real match defeats
+        if: steps.new_reports.outputs.files != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.ARENA_DEFEAT_ISSUE_TOKEN }}
+          NEW_REPORT_FILES: ${{ steps.new_reports.outputs.files }}
+        run: |
+          echo "$NEW_REPORT_FILES" | while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            echo "Filing defeat issues for $file"
+            uv run aasm-arena reports defeat-issues "$file" --no-dry-run
+          done
