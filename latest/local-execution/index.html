@@ -802,6 +802,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#llm-execution-mode-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLM execution mode policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1208,6 +1219,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#llm-execution-mode-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLM execution mode policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1395,6 +1417,80 @@ exit code, and <code>audit.jsonl</code> are the only output.</p>
   it is no longer part of <code>default_runner_registry()</code> — a real <code>aasm-arena
   run</code> invocation never uses it.</li>
 </ul>
+<h2 id="llm-execution-mode-policy">LLM execution mode policy<a class="headerlink" href="#llm-execution-mode-policy" title="Permanent link">&para;</a></h2>
+<p><code>aasm-arena run --llm-mode</code> (AAASM-4405, <code>arena.runner.llm_mode</code>) controls
+how a match's agents are allowed to interact with LLMs. It's a separate knob
+from <code>--adapter</code> (which selects the <code>AgentAssemblyClient</code> that renders
+governance decisions) — <code>--llm-mode</code> is about whether agents make real model
+calls at all.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Default</th>
+<th>Real, paid model API calls</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mock</code></td>
+<td>Yes</td>
+<td>Never</td>
+<td>Deterministic/canned model behavior.</td>
+</tr>
+<tr>
+<td><code>replay</code></td>
+<td>No</td>
+<td>Never</td>
+<td>Replays previously recorded model responses.</td>
+</tr>
+<tr>
+<td><code>live</code></td>
+<td>No</td>
+<td>Only mode that may</td>
+<td>Requires explicit opt-in — see below.</td>
+</tr>
+</tbody>
+</table>
+<p><code>mock</code> is the default so Arena stays deterministic and zero-cost unless a
+caller explicitly asks for something else. Today this is true by
+construction, not just by policy: no official agent
+(<code>agents/official/*/main.py</code>) makes a real model call at all — <code>ci-debug-agent</code>
+uses <code>pydantic_ai.models.test.TestModel</code>, and every other official agent is a
+plain scripted <code>raw-python</code>/<code>langgraph</code> persona with no LLM in the loop (see
+each agent's own module docstring). All five official agents therefore run
+in <code>mock</code> mode with no external credentials required.</p>
+<p><strong><code>live</code> mode is gated behind explicit opt-in.</strong> Requesting <code>--llm-mode live</code>
+(or constructing a <code>MatchConfig(llm_mode=LLMMode.LIVE, ...)</code> directly) is
+rejected with a clear error unless the environment variable
+<code>AASM_ARENA_LIVE_LLM</code> is set to the literal string <code>true</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>$<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>aasm-arena<span class="w"> </span>run<span class="w"> </span>github-maintainer-dungeon<span class="w"> </span>--llm-mode<span class="w"> </span>live
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>✗<span class="w"> </span>llm_mode<span class="w"> </span><span class="s1">&#39;live&#39;</span><span class="w"> </span>requires<span class="w"> </span><span class="nv">AASM_ARENA_LIVE_LLM</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>to<span class="w"> </span>be<span class="w"> </span><span class="nb">set</span><span class="w"> </span>explicitly<span class="w"> </span>—
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>refusing<span class="w"> </span>to<span class="w"> </span>make<span class="w"> </span>real,<span class="w"> </span>paid<span class="w"> </span>model<span class="w"> </span>API<span class="w"> </span>calls<span class="w"> </span>without<span class="w"> </span>opt-in
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>$<span class="w"> </span><span class="nv">AASM_ARENA_LIVE_LLM</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>aasm-arena<span class="w"> </span>run<span class="w"> </span>github-maintainer-dungeon<span class="w"> </span>--llm-mode<span class="w"> </span>live
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1"># proceeds</span>
+</span></code></pre></div>
+<p>This gate is enforced by <code>run_match</code> itself (<code>arena.runner.match.run_match</code>
+calls <code>arena.runner.llm_mode.validate_llm_mode</code> before doing any other
+work), not just by the CLI, so it holds for any direct caller of the Python
+API too.</p>
+<p><strong>Why this keeps <code>live</code> mode out of PR/fork CI by construction.</strong> None of
+this repo's GitHub Actions workflows (<code>ci.yml</code>, <code>validate-community-agents.yml</code>,
+<code>scheduled-matches.yml</code>) set <code>AASM_ARENA_LIVE_LLM</code> — and
+<code>validate-community-agents.yml</code>, the one workflow that runs against
+untrusted fork PR content, never invokes <code>aasm-arena run</code> at all (it only
+runs <code>aasm-arena agents validate</code>, which parses manifests and never executes
+an agent's declared entrypoint). A single env-var gate is therefore
+sufficient: there is no code path in this repo's own workflows that both
+runs a match <em>and</em> sets the opt-in variable.</p>
+<p><strong>Budget guards.</strong> <code>MatchConfig</code> also carries two optional fields,
+<code>max_live_calls: int | None</code> and <code>max_cost_usd: float | None</code>, consulted
+only when <code>llm_mode</code> is <code>live</code>. These are deliberately just data today, not
+an enforcement mechanism — no caller reads them yet — so <code>MatchConfig</code>'s
+live-mode shape doesn't need a breaking change once real cost tracking
+lands.</p>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <p><strong>"Docker not installed" / daemon not running.</strong> <code>DockerRunner</code> only
 matters if you're running a <code>docker</code>-type agent. If you don't have Docker
@@ -1410,7 +1506,7 @@ only the <code>command</code>-type agents you care about with <code>--agent</cod
 <p><strong>A <code>ProcessRunner</code> timeout.</strong> <code>ProcessRunner</code> bounds every agent process to
 <code>DEFAULT_TIMEOUT_SECONDS</code> (30s) by default. A trial that hits this shows up
 with exit code <code>124</code> and a stderr line like:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>[arena.ProcessRunner] agent process timed out after 30.0s (command=...); this is a runner-enforced timeout, not a real process exit
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>[arena.ProcessRunner] agent process timed out after 30.0s (command=...); this is a runner-enforced timeout, not a real process exit
 </span></code></pre></div>
 <p>This is expected, deliberate behavior for a hung/looping agent — one stuck
 agent process can't stall the whole match. There's no <code>--timeout</code> CLI flag
@@ -1433,7 +1529,7 @@ new agent and don't want that constraint.</p>
 <p><strong><code>scenarios validate</code> before you run.</strong> If a scenario or trial YAML file
 doesn't load, <code>aasm-arena run</code> fails fast with a load error rather than a
 partial run. Validate independently first:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>uv<span class="w"> </span>run<span class="w"> </span>aasm-arena<span class="w"> </span>scenarios<span class="w"> </span>validate<span class="w"> </span>scenarios/github-maintainer-dungeon
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>uv<span class="w"> </span>run<span class="w"> </span>aasm-arena<span class="w"> </span>scenarios<span class="w"> </span>validate<span class="w"> </span>scenarios/github-maintainer-dungeon
 </span></code></pre></div>
 <h2 id="smoke-tests">Smoke tests<a class="headerlink" href="#smoke-tests" title="Permanent link">&para;</a></h2>
 <p><code>tests/test_smoke_local_run.py</code> is the automated version of "does a local
@@ -1447,7 +1543,7 @@ own docstrings for why that test intentionally still expects the official
 agent's trials to fail there — an external <code>tmp_path</code> output root doesn't
 satisfy the offset described above).</p>
 <p>Run it directly:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/test_smoke_local_run.py<span class="w"> </span>-v
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/test_smoke_local_run.py<span class="w"> </span>-v
 </span></code></pre></div>
 
 
@@ -1471,7 +1567,7 @@ satisfy the offset described above).</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 11, 2026 06:14:41 UTC"><span class="timeago" datetime="2026-07-11T06:14:41+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 11, 2026 06:14:41 UTC">2026-07-11</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 12, 2026 03:22:00 UTC"><span class="timeago" datetime="2026-07-12T03:22:00+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 12, 2026 03:22:00 UTC">2026-07-12</span>
   </span>
 
     
