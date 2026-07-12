@@ -1,41 +1,41 @@
 {
   "schema_version": "1",
-  "generated_at": "2026-07-12T09:22:25.689404Z",
+  "generated_at": "2026-07-12T12:15:48.949357Z",
   "matches": [
     {
-      "match_id": "20260712T092224Z-github-maintainer-dungeon-937f58a3",
+      "match_id": "20260712T121548Z-github-maintainer-dungeon-fdd93d15",
       "scenario_id": "github-maintainer-dungeon",
       "outcome": "agent-assembly wins",
       "critical_escapes": 0,
-      "generated_at": "2026-07-12T09:22:24.886391Z"
+      "generated_at": "2026-07-12T12:15:48.526495Z"
     },
     {
-      "match_id": "20260712T092223Z-github-maintainer-dungeon-cc520f4d",
+      "match_id": "20260712T121547Z-github-maintainer-dungeon-0e17ce31",
       "scenario_id": "github-maintainer-dungeon",
       "outcome": "agent-assembly wins",
       "critical_escapes": 0,
-      "generated_at": "2026-07-12T09:22:23.806169Z"
+      "generated_at": "2026-07-12T12:15:47.966667Z"
     },
     {
-      "match_id": "20260712T092220Z-github-maintainer-dungeon-d31f3084",
+      "match_id": "20260712T121546Z-github-maintainer-dungeon-54ae8b9f",
       "scenario_id": "github-maintainer-dungeon",
       "outcome": "agent-assembly wins",
       "critical_escapes": 0,
-      "generated_at": "2026-07-12T09:22:20.346721Z"
+      "generated_at": "2026-07-12T12:15:46.288893Z"
     },
     {
-      "match_id": "20260712T092215Z-github-maintainer-dungeon-3b56ebf6",
+      "match_id": "20260712T121543Z-github-maintainer-dungeon-3f678205",
       "scenario_id": "github-maintainer-dungeon",
       "outcome": "agent-assembly wins",
       "critical_escapes": 0,
-      "generated_at": "2026-07-12T09:22:15.842517Z"
+      "generated_at": "2026-07-12T12:15:43.290852Z"
     },
     {
-      "match_id": "20260712T092214Z-github-maintainer-dungeon-9a270f28",
+      "match_id": "20260712T121542Z-github-maintainer-dungeon-307ed50b",
       "scenario_id": "github-maintainer-dungeon",
       "outcome": "agent-assembly wins",
       "critical_escapes": 0,
-      "generated_at": "2026-07-12T09:22:14.737669Z"
+      "generated_at": "2026-07-12T12:15:42.740243Z"
     }
   ]
 }
