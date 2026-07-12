@@ -32,6 +32,23 @@ def _escape(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
 
 
+def _render_execution(report: MatchReport) -> list[str]:
+    execution = report.execution
+    determinism_note = (
+        "deterministic" if execution.deterministic else "⚠️ NON-DETERMINISTIC — real model calls"
+    )
+    calls = execution.external_model_calls if execution.external_model_calls is not None else "—"
+    cost = execution.estimated_cost_usd if execution.estimated_cost_usd is not None else "—"
+    return [
+        "## Execution",
+        "",
+        "| LLM mode | Deterministic | External model calls | Estimated cost (USD) |",
+        "|---|---|---:|---:|",
+        f"| `{execution.llm_mode.value}` | {determinism_note} | {calls} | {cost} |",
+        "",
+    ]
+
+
 def _render_summary(report: MatchReport) -> list[str]:
     score = report.score
     thresholds = report.victory_conditions
@@ -55,12 +72,14 @@ def _render_summary(report: MatchReport) -> list[str]:
 
 def _render_trial(trial: TrialReport) -> list[str]:
     status = "PASS" if trial.passed else "FAIL"
+    behavior = trial.behavior_id if trial.behavior_id is not None else "(default)"
     lines = [
         f"### `{trial.trial_id}` — {trial.agent_id} — {status}",
         "",
         trial.description,
         "",
         f"- **Severity:** {trial.severity.value}",
+        f"- **Behavior profile:** {behavior}",
         f"- **Exit code:** {trial.exit_code}",
         f"- **Duration:** {trial.duration_seconds:.2f}s",
     ]
@@ -120,6 +139,7 @@ def render_markdown(report: MatchReport) -> str:
         f"**Agents:** {', '.join(report.agents) if report.agents else '(none)'}",
         "",
     ]
+    lines.extend(_render_execution(report))
     lines.extend(_render_summary(report))
     lines.append("## Trials")
     lines.append("")

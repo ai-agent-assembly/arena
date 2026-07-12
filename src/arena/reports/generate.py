@@ -52,9 +52,10 @@ from pathlib import Path
 
 from arena.integrations.audit import ArenaAuditEvent
 from arena.reports.markdown import render_markdown
-from arena.reports.models import MatchReport, TrialReport
+from arena.reports.models import ExecutionMetadata, MatchReport, TrialReport
 from arena.reports.scoring import MatchScore
 from arena.runner.events import MatchEventType
+from arena.runner.llm_mode import LLMMode
 from arena.runner.match import AUDIT_LOG_FILENAME, MatchResult
 
 #: Filenames written under `<reports_root>/<match_id>/` by `generate_report`.
@@ -71,6 +72,36 @@ def _match_started_at(match_result: MatchResult) -> datetime:
         if event.type is MatchEventType.MATCH_STARTED:
             return event.timestamp
     return datetime.now(UTC)
+
+
+def build_execution_metadata(match_result: MatchResult) -> ExecutionMetadata:
+    """Derive `ExecutionMetadata` from the `LLMMode`/budget-guard fields
+    `run_match` carried onto `match_result` (AAASM-4405/4406).
+
+    `deterministic` is derived from `llm_mode` rather than a second,
+    independently-settable input — see `ExecutionMetadata`'s own docstring
+    for why `mock`/`replay` are always zero-cost/zero-call and `live`
+    mirrors `MatchConfig.max_live_calls`/`max_cost_usd` (or `None` when
+    neither budget guard was configured).
+
+    Exposed as its own function (rather than inlined in `build_report`) so
+    `arena.cli.run_command` can print the same execution summary a report's
+    `MatchReport.execution` will contain, straight from the `MatchResult`
+    `run_match` already returned, without re-running `build_report`.
+    """
+    deterministic = match_result.llm_mode is not LLMMode.LIVE
+    if deterministic:
+        external_model_calls: int | None = 0
+        estimated_cost_usd: float | None = 0.0
+    else:
+        external_model_calls = match_result.max_live_calls
+        estimated_cost_usd = match_result.max_cost_usd
+    return ExecutionMetadata(
+        llm_mode=match_result.llm_mode,
+        deterministic=deterministic,
+        external_model_calls=external_model_calls,
+        estimated_cost_usd=estimated_cost_usd,
+    )
 
 
 def build_report(
@@ -107,6 +138,7 @@ def build_report(
             error=outcome.error,
             exit_code=outcome.result.exit_code,
             duration_seconds=outcome.result.duration_seconds,
+            behavior_id=outcome.trial.behavior_id,
             audit_events=tuple(events_by_trial.get((outcome.agent_id, outcome.trial.id), ())),
         )
         for outcome in match_result.trial_outcomes
@@ -124,6 +156,7 @@ def build_report(
         score=score,
         trials=trials,
         unattributed_audit_events=tuple(unattributed),
+        execution=build_execution_metadata(match_result),
     )
 
 

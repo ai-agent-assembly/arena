@@ -42,14 +42,23 @@ from arena.reports.defeat import (
     load_defeat_routing_config,
     route_defeat,
 )
-from arena.reports.models import MatchReport, TrialReport
+from arena.reports.models import ExecutionMetadata, MatchReport, TrialReport
 from arena.reports.scoring import MatchOutcome, MatchScore
+from arena.runner.llm_mode import LLMMode
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES_ROOT = REPO_ROOT / "docs" / "samples"
 
 _MATCH_ID = "20260710T000000Z-test-scenario-deadbeef"
 _MATCH_STARTED_AT = datetime(2026, 7, 10, 0, 0, 0, tzinfo=UTC)
+
+#: Default `MatchReport.execution` for hand-built fixtures in this module —
+#: mirrors what `arena.reports.generate.build_execution_metadata` derives
+#: for a `mock`-mode match, since none of the defeat-classification fixtures
+#: here care about `llm_mode` itself.
+_MOCK_EXECUTION = ExecutionMetadata(
+    llm_mode=LLMMode.MOCK, deterministic=True, external_model_calls=0, estimated_cost_usd=0.0
+)
 
 
 # --- shared fixtures ---------------------------------------------------------
@@ -119,6 +128,7 @@ def _report(
         score=score or _zero_score(),
         trials=trials,
         unattributed_audit_events=unattributed_audit_events,
+        execution=_MOCK_EXECUTION,
     )
 
 
