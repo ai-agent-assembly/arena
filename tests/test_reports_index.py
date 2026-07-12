@@ -27,6 +27,7 @@ from arena.reports.index import (
     LEADERBOARD_SCHEMA_VERSION,
     LatestReportIndex,
     LeaderboardIndex,
+    _discover_match_reports,
     refresh_static_index,
 )
 from arena.reports.markdown import render_markdown
@@ -271,3 +272,106 @@ def test_leaderboard_entry_outcome_serializes_as_plain_string(tmp_path: Path) ->
     static_root = tmp_path / "reports"
     payload = json.loads((static_root / LEADERBOARD_JSON_FILENAME).read_text(encoding="utf-8"))
     assert payload["matches"][0]["outcome"] == "agent-assembly wins"
+
+
+# --- stale schema_version reports are skipped, not fatal (AAASM-4509) ------------
+
+
+def _write_stale_schema_report(*, reports_root: Path, match_id: str) -> None:
+    """Write a raw `arena-report.json` stamped `schema_version: "1"` (pre-
+    AAASM-4406, before `MatchReport.execution` became required) directly to
+    disk -- not via `generate_report`/`_write_match`, since the whole point
+    is a payload the *current* `MatchReport` can no longer validate. Mirrors
+    the real production incident AAASM-4506 fixed for the docs-build script:
+    a report written before a `SCHEMA_VERSION` bump left sitting under
+    `reports_root` after the bump lands.
+    """
+    match_dir = reports_root / match_id
+    match_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": "1",
+        "match_id": match_id,
+        "scenario_id": "scenario-a",
+        "scenario_name": "Test Scenario",
+        "scenario_description": "A stale-schema report used only for AAASM-4509 tests.",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "agents": ["agent-a"],
+        "victory_conditions": {},
+        "score": {
+            "match_id": match_id,
+            "critical_escapes": 0,
+            "unexpected_allows": 0,
+            "secret_exposures": 0,
+            "approval_bypasses": 0,
+            "missing_audits": 0,
+            "agent_runtime_failures": 0,
+            "outcome": "agent-assembly wins",
+        },
+        "trials": [],
+        # Deliberately no "execution" key -- schema "1" predates AAASM-4406's
+        # required `MatchReport.execution` field.
+    }
+    (match_dir / ARENA_REPORT_JSON_FILENAME).write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def test_discover_match_reports_skips_schema_version_mismatch(tmp_path: Path) -> None:
+    reports_root = tmp_path / "reports" / "matches"
+    fixed_now = datetime(2026, 7, 10, 12, 0, 0, tzinfo=UTC)
+    _write_match(
+        reports_root=reports_root,
+        match_id="match-current",
+        scenario_id="scenario-a",
+        timestamp=fixed_now,
+    )
+    _write_stale_schema_report(reports_root=reports_root, match_id="match-stale")
+
+    reports = _discover_match_reports(reports_root)
+
+    assert [report.match_id for report in reports] == ["match-current"]
+
+
+def test_refresh_static_index_skips_stale_schema_report_without_crashing(tmp_path: Path) -> None:
+    reports_root = tmp_path / "reports" / "matches"
+    fixed_now = datetime(2026, 7, 10, 12, 0, 0, tzinfo=UTC)
+    _write_match(
+        reports_root=reports_root,
+        match_id="match-current",
+        scenario_id="scenario-a",
+        timestamp=fixed_now,
+    )
+    _write_stale_schema_report(reports_root=reports_root, match_id="match-stale")
+
+    refresh_static_index(reports_root, now=fixed_now)  # must not raise
+
+    static_root = tmp_path / "reports"
+    latest = LatestReportIndex.model_validate_json(
+        (static_root / LATEST_JSON_FILENAME).read_text(encoding="utf-8")
+    )
+    assert latest.match_id == "match-current"
+
+    leaderboard = LeaderboardIndex.model_validate_json(
+        (static_root / LEADERBOARD_JSON_FILENAME).read_text(encoding="utf-8")
+    )
+    assert [entry.match_id for entry in leaderboard.matches] == ["match-current"]
+
+
+def test_discover_match_reports_finds_all_committed_matches() -> None:
+    """Regression guard for AAASM-4509: every currently-committed
+    `reports/matches/*/arena-report.json` (all schema `"2"`, per
+    `test_reports_schema_version.py`) must remain fully discoverable after
+    adding the schema-version guard -- the guard must only skip genuinely
+    stale reports, never current ones.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    reports_root = repo_root / "reports" / "matches"
+    on_disk_match_ids = {
+        report_path.parent.name
+        for report_path in reports_root.glob(f"*/{ARENA_REPORT_JSON_FILENAME}")
+    }
+    assert on_disk_match_ids  # sanity: this repo has committed match reports
+
+    reports = _discover_match_reports(reports_root)
+
+    assert {report.match_id for report in reports} == on_disk_match_ids
