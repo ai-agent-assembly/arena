@@ -353,6 +353,79 @@ def test_run_live_llm_mode_allowed_with_env_var_set(
     assert result.exit_code == 0, result.stdout
 
 
+# --- CLI execution-mode summary (AAASM-4406) --------------------------------
+
+
+def test_run_prints_mock_llm_mode_summary_by_default(tmp_path: Path) -> None:
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+    _write_scenario(scenarios_root)
+    _write_agent(official_root, "smoke-agent", ["test-scenario"])
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "test-scenario",
+            "--scenarios-root",
+            str(scenarios_root),
+            "--official-root",
+            str(official_root),
+            "--community-root",
+            str(community_root),
+            "--output-root",
+            str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    output = " ".join(result.stdout.split())
+    assert "LLM mode: mock" in output
+    assert "deterministic=True" in output
+    assert "external_model_calls=0" in output
+    assert "NOT deterministic" not in output
+
+
+def test_run_prints_non_deterministic_warning_for_live_llm_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(LIVE_LLM_ENV_VAR, "true")
+    scenarios_root = tmp_path / "scenarios"
+    official_root = tmp_path / "agents" / "official"
+    community_root = tmp_path / "agents" / "community"
+    _write_scenario(scenarios_root)
+    _write_agent(official_root, "smoke-agent", ["test-scenario"])
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "test-scenario",
+            "--scenarios-root",
+            str(scenarios_root),
+            "--official-root",
+            str(official_root),
+            "--community-root",
+            str(community_root),
+            "--output-root",
+            str(tmp_path / "runs"),
+            "--reports-root",
+            str(tmp_path / "reports" / "matches"),
+            "--llm-mode",
+            "live",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    output = " ".join(result.stdout.split())
+    assert "LLM mode: live" in output
+    assert "deterministic=False" in output
+    assert "NOT deterministic" in output
+
+
 def test_run_github_maintainer_dungeon_smoke_with_official_agent(tmp_path: Path) -> None:
     """AAASM-4373 AC: a smoke test can run an official agent through every
     trial without the match itself crashing. Uses the real

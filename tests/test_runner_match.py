@@ -262,6 +262,28 @@ def test_run_match_live_llm_mode_allowed_with_env_var_set(
     assert result.trial_outcomes
 
 
+# --- run_match: MatchResult carries execution metadata (AAASM-4406) ---------
+
+
+def test_run_match_result_carries_configured_llm_mode(match_config: MatchConfig) -> None:
+    result = run_match("test-scenario", match_config)
+
+    assert result.llm_mode is LLMMode.MOCK
+
+
+def test_run_match_result_carries_configured_budget_guards(
+    match_config: MatchConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(LIVE_LLM_ENV_VAR, "true")
+    live_config = replace(match_config, llm_mode=LLMMode.LIVE, max_live_calls=7, max_cost_usd=2.5)
+
+    result = run_match("test-scenario", live_config)
+
+    assert result.llm_mode is LLMMode.LIVE
+    assert result.max_live_calls == 7
+    assert result.max_cost_usd == 2.5
+
+
 # --- run_match: behavior_id cross-referential validation (AAASM-4404) --------
 
 
