@@ -157,6 +157,7 @@ nav:
       - Submitting an agent: submit-agent.md
   - Reports:
       - Report schema: report-schema.md
+      - Latest reports: latest-reports.md
       - "Sample: winning match": samples/winning-match/arena-report.md
       - "Sample: losing match": samples/losing-match/arena-report.md
   - Security Policy: security-policy.md
