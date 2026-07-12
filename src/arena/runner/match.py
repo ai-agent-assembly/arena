@@ -58,6 +58,7 @@ from arena.registry.discovery import (
 from arena.runner.base import AgentRunResult, Runner
 from arena.runner.docker import DockerRunner
 from arena.runner.events import MatchEvent, MatchEventType
+from arena.runner.llm_mode import LiveLLMModeNotEnabledError, LLMMode, validate_llm_mode
 from arena.runner.process import ProcessRunner
 from arena.scenarios.loader import (
     ScenarioLoadError,
@@ -141,6 +142,22 @@ class MatchConfig:
     #: `_resolve_client` for exactly how each choice is turned into a client
     #: per trial.
     adapter: AdapterChoice = AdapterChoice.FAKE
+    #: Which LLM execution mode (AAASM-4405, `arena.runner.llm_mode`) this
+    #: match's agents run under. Defaults to `LLMMode.MOCK` so Arena stays
+    #: deterministic and zero-cost unless a caller explicitly opts into
+    #: something else. `run_match` enforces `LLMMode.LIVE`'s opt-in gate via
+    #: `validate_llm_mode` before doing any other work — see that function's
+    #: docstring for exactly what's required.
+    llm_mode: LLMMode = LLMMode.MOCK
+    #: Optional budget guards consulted only when `llm_mode` is
+    #: `LLMMode.LIVE`. Deliberately just data on this config, not an
+    #: enforcement mechanism: no caller reads these yet (that's future,
+    #: cost-tracking-pipeline work, out of scope for AAASM-4405 — see the
+    #: ticket's "budget-guard fields" scope note), they exist now so
+    #: `MatchConfig`'s live-mode shape doesn't need a breaking change later.
+    max_live_calls: int | None = None
+    #: See `max_live_calls`.
+    max_cost_usd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -358,8 +375,15 @@ def run_match(
 
     Raises:
         MatchOrchestrationError: the scenario id is unknown, no agents are
-            registered/compatible, or agent/scenario loading fails.
+            registered/compatible, agent/scenario loading fails, or
+            `config.llm_mode` is `LLMMode.LIVE` without its opt-in env var
+            set (AAASM-4405 — see `arena.runner.llm_mode.validate_llm_mode`).
     """
+    try:
+        validate_llm_mode(config.llm_mode)
+    except LiveLLMModeNotEnabledError as exc:
+        raise MatchOrchestrationError(str(exc)) from exc
+
     try:
         scenario_registry = load_scenario_registry(config.scenarios_root)
     except ScenarioLoadError as exc:
