@@ -135,6 +135,56 @@ on-demand via `workflow_dispatch`) and commits whatever changed under
 workflow file for exactly which agents run and how it avoids re-triggering
 `ci.yml`/`documentation.yml` on its own commit.
 
+## Live GitHub issue creation for real defeats (AAASM-4505)
+
+Every scheduled run of `.github/workflows/scheduled-matches.yml` also files
+a real GitHub issue for each real defeat one of that run's matches produced.
+
+**What triggers issue creation.** After `aasm-arena run` writes a match's
+`arena-report.json`, the workflow's "File live GitHub issues for real match
+defeats" step runs `aasm-arena reports defeat-issues <path> --no-dry-run`
+against every report *that run itself* just wrote (never against this
+repo's whole report history). `arena.reports.defeat.classify_defeats` ->
+`route_defeat` -> `arena.reports.issue_payload.build_issue_payload` ->
+`arena.reports.github_issues.create_issues_for_report` is the pipeline: a
+winning match's report has no defeats, produces zero payloads, and makes
+zero GitHub API calls — issue creation only ever fires for a real, scored
+defeat. This only ever runs from `scheduled-matches.yml`, which is
+`schedule`/`workflow_dispatch`-triggered only (no `pull_request` trigger),
+so a fork/PR run can never create a real issue.
+
+**Required secret.** Live issue creation shells out to the `gh` CLI, which
+authenticates via the `GH_TOKEN` (checked first) or `GITHUB_TOKEN`
+environment variable. `scheduled-matches.yml` sets `GH_TOKEN` from the
+**`ARENA_DEFEAT_ISSUE_TOKEN`** repository secret — deliberately *not* the
+default `GITHUB_TOKEN` GitHub Actions provides, because most defeat
+categories route to `ai-agent-assembly/agent-assembly`
+(`defeat_routing.yaml`), a different repo than the one the workflow runs
+in, and the default per-repo `GITHUB_TOKEN` cannot grant access across
+repos. **Configuring this secret is a manual, one-time, repo-admin action —
+not something this code sets up**: a repo admin must create a token
+(classic PAT or fine-grained) with `issues:write` on both
+`ai-agent-assembly/arena` and `ai-agent-assembly/agent-assembly`, then add
+it as `ARENA_DEFEAT_ISSUE_TOKEN` under this repo's Settings -> Secrets and
+variables -> Actions. Until that's done, the workflow step fails clearly
+(`arena.reports.github_issues.GitHubIssueCreationError`, "Live GitHub issue
+creation requires a token in the GH_TOKEN (or GITHUB_TOKEN) environment
+variable...") rather than silently no-op-ing — `continue-on-error: true` on
+that step keeps a missing/expired token from blocking the report-refresh
+commit, but the step still shows as failed in the run summary.
+
+**Duplicate prevention.** Every issue body ends with a hidden HTML comment,
+`<!-- arena-fingerprint: <hash> -->`, where `<hash>` is
+`arena.reports.issue_payload.compute_fingerprint`'s stable, deterministic
+hash of the defeat's scenario/trial/category/detail/policy-id. Before
+filing, `arena.reports.github_issues.find_existing_issue` searches the
+target repo for an **open** issue whose body already contains that exact
+marker (`gh issue list --search "<fingerprint> in:body" --state open`); a
+match skips creation and reuses the existing issue instead of filing a
+duplicate. The marker is invisible when an issue is rendered (HTML comments
+don't display on GitHub) but is indexed by GitHub's own search, so this
+needs no separate tracking database.
+
 ## Docs/website integration contract
 
 This section is for whoever wires up `official-website`'s `/arena` page or
