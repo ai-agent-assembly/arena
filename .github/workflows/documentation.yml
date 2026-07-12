@@ -47,6 +47,12 @@ jobs:
       - name: Install docs dependency group
         run: uv sync --group docs
 
+      # Regenerate docs/latest-reports.md from the live reports/leaderboard.json
+      # and reports/latest.json (AAASM-4429) so the page reflects whatever is
+      # currently on `reports/` at build time — see scripts/render_latest_reports_page.py.
+      - name: Render latest reports page
+        run: uv run python scripts/render_latest_reports_page.py
+
       # Build-only: validates the site compiles under --strict. No mike
       # deploy, no push to gh-pages — PRs must never mutate published docs.
       - name: Build documentation
@@ -82,6 +88,14 @@ jobs:
       # on the very first-ever deploy, when the branch doesn't exist yet.
       - name: Fetch existing gh-pages branch (if any)
         run: git fetch origin gh-pages --depth=1 || true
+
+      # Regenerate docs/latest-reports.md from the live reports/leaderboard.json
+      # and reports/latest.json (AAASM-4429) so the deployed page reflects
+      # whatever `reports/` holds at deploy time — see
+      # scripts/render_latest_reports_page.py. `mike deploy` below reuses this
+      # same checkout, so this only needs to run once before both builds.
+      - name: Render latest reports page
+        run: uv run python scripts/render_latest_reports_page.py
 
       # Pre-flight: fail fast if the build itself is broken before touching
       # gh-pages.
