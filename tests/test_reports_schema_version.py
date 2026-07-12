@@ -36,7 +36,7 @@ SAMPLES_ROOT = REPO_ROOT / "docs" / "samples"
 #: `scripts/generate_report_samples.py`) — that's the point: a bump is a
 #: visible, two-place, reviewed change, not something that can silently
 #: slip through because this test compared the constant against itself.
-_EXPECTED_SCHEMA_VERSION = "1"
+_EXPECTED_SCHEMA_VERSION = "2"
 
 
 def test_schema_version_constant_matches_expected_literal() -> None:
@@ -68,6 +68,12 @@ def test_match_report_default_schema_version_matches_expected_literal() -> None:
                 "outcome": "agent-assembly wins",
             },
             "trials": [],
+            "execution": {
+                "llm_mode": "mock",
+                "deterministic": True,
+                "external_model_calls": 0,
+                "estimated_cost_usd": 0.0,
+            },
         }
     )
 

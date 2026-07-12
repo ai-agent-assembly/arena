@@ -65,6 +65,25 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      # AAASM-4406: confirm, in the run's own summary, that this workflow
+      # never opts into real, paid LLM calls before any match actually
+      # runs. None of the `aasm-arena run` invocations below pass
+      # `--llm-mode` (so every match uses the CLI's own `mock` default —
+      # see `arena.runner.llm_mode`'s module docstring), and this job's
+      # `env` never sets `AASM_ARENA_LIVE_LLM` — so this check reports the
+      # actual state of the workflow, not just a claim.
+      - name: Summarize LLM execution mode
+        run: |
+          {
+            echo "### LLM execution mode"
+            echo ""
+            if [ "${AASM_ARENA_LIVE_LLM:-}" = "true" ]; then
+              echo "⚠️ **live** — \`AASM_ARENA_LIVE_LLM=true\` is set. Real, paid model API calls are enabled for this run's matches."
+            else
+              echo "✅ **mock** (default) — live LLM calls are disabled. \`AASM_ARENA_LIVE_LLM\` is not set to \`true\` in this workflow, and none of the runs below pass \`--llm-mode live\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # One `aasm-arena run --agent <id>` per official agent — see
       # agents/official/*/agent.yaml's `scenarios:` list: every official
       # agent today declares only `github-maintainer-dungeon`, so the real

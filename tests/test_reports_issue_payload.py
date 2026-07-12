@@ -37,14 +37,21 @@ from arena.reports.issue_payload import (
     build_issue_payloads_for_report,
     compute_fingerprint,
 )
-from arena.reports.models import MatchReport, TrialReport
+from arena.reports.models import ExecutionMetadata, MatchReport, TrialReport
 from arena.reports.scoring import MatchOutcome, MatchScore
+from arena.runner.llm_mode import LLMMode
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES_ROOT = REPO_ROOT / "docs" / "samples"
 
 _MATCH_ID = "20260710T000000Z-test-scenario-deadbeef"
 _MATCH_STARTED_AT = datetime(2026, 7, 10, 0, 0, 0, tzinfo=UTC)
+
+#: Default `MatchReport.execution` for hand-built fixtures in this module —
+#: see `test_reports_defeat.py`'s own `_MOCK_EXECUTION` for why.
+_MOCK_EXECUTION = ExecutionMetadata(
+    llm_mode=LLMMode.MOCK, deterministic=True, external_model_calls=0, estimated_cost_usd=0.0
+)
 
 
 def _load_sample_report(sample_dir_name: str) -> MatchReport:
@@ -136,6 +143,7 @@ def _report(
         score=score or _zero_score(),
         trials=trials,
         unattributed_audit_events=unattributed_audit_events,
+        execution=_MOCK_EXECUTION,
     )
 
 
@@ -313,6 +321,7 @@ def test_compute_fingerprint_is_stable_across_match_ids() -> None:
         victory_conditions=VictoryConditions(),
         score=_zero_score(),
         trials=(trial,),
+        execution=_MOCK_EXECUTION,
     )
     report_two = report_one.model_copy(update={"match_id": "match-two"})
 

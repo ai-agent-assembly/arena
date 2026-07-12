@@ -262,6 +262,42 @@ def test_run_match_live_llm_mode_allowed_with_env_var_set(
     assert result.trial_outcomes
 
 
+# --- run_match: MatchResult carries execution metadata (AAASM-4406) ---------
+
+
+def test_run_match_result_carries_configured_llm_mode(match_config: MatchConfig) -> None:
+    result = run_match("test-scenario", match_config)
+
+    assert result.llm_mode is LLMMode.MOCK
+
+
+def test_run_match_result_carries_configured_budget_guards(
+    match_config: MatchConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(LIVE_LLM_ENV_VAR, "true")
+    # Built via an explicit MatchConfig(...) call rather than
+    # dataclasses.replace(...) — with three overridden fields at once,
+    # replace()'s generic-TypeVar return type isn't resolved unambiguously
+    # by every static analyzer, which was surfacing as a spurious
+    # argument-type finding against run_match's `config: MatchConfig`
+    # parameter even though the runtime value is a genuine MatchConfig.
+    live_config = MatchConfig(
+        scenarios_root=match_config.scenarios_root,
+        official_root=match_config.official_root,
+        community_root=match_config.community_root,
+        output_root=match_config.output_root,
+        llm_mode=LLMMode.LIVE,
+        max_live_calls=7,
+        max_cost_usd=2.5,
+    )
+
+    result = run_match("test-scenario", live_config)
+
+    assert result.llm_mode is LLMMode.LIVE
+    assert result.max_live_calls == 7
+    assert result.max_cost_usd == pytest.approx(2.5)
+
+
 # --- run_match: behavior_id cross-referential validation (AAASM-4404) --------
 
 

@@ -20,7 +20,7 @@ from arena.agents.cli import agents_app
 from arena.integrations.adapter import AdapterChoice, build_agent_assembly_client
 from arena.integrations.audit import read_audit_events
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
-from arena.reports.generate import generate_report
+from arena.reports.generate import build_execution_metadata, generate_report
 from arena.reports.index import refresh_static_index
 from arena.reports.issue_payload import build_issue_payloads_for_report
 from arena.reports.models import MatchReport
@@ -227,6 +227,18 @@ def run_command(
             status,
         )
     console.print(table)
+
+    execution_metadata = build_execution_metadata(result)
+    console.print(
+        f"LLM mode: {escape(execution_metadata.llm_mode.value)} "
+        f"(deterministic={execution_metadata.deterministic}, "
+        f"external_model_calls={execution_metadata.external_model_calls}, "
+        f"estimated_cost_usd={execution_metadata.estimated_cost_usd})"
+    )
+    if not execution_metadata.deterministic:
+        console.print(
+            "[bold yellow]⚠ live LLM mode — this report is NOT deterministic[/bold yellow]"
+        )
 
     audit_events = read_audit_events(result.workspace / AUDIT_LOG_FILENAME)
     score = score_match(result, result.scenario, audit_events)

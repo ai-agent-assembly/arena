@@ -228,7 +228,17 @@ class TrialOutcome:
 
 @dataclass(frozen=True)
 class MatchResult:
-    """The full outcome of one `run_match` call."""
+    """The full outcome of one `run_match` call.
+
+    `llm_mode`/`max_live_calls`/`max_cost_usd` mirror the `MatchConfig`
+    fields of the same name (AAASM-4405) that this match actually ran
+    under — carried onto the result so `arena.reports.generate.build_report`
+    (AAASM-4406) can record them on the report's `ExecutionMetadata` without
+    `build_report` needing a separate `MatchConfig` parameter. Defaulted
+    (rather than required) so every existing hand-built `MatchResult` in this
+    codebase's tests keeps constructing without changes; a real `run_match`
+    call always fills them in from its own `config`.
+    """
 
     match_id: str
     scenario: ScenarioSpec
@@ -237,6 +247,9 @@ class MatchResult:
     trial_outcomes: tuple[TrialOutcome, ...]
     critical_escapes: int
     victory_conditions_violated: bool
+    llm_mode: LLMMode = LLMMode.MOCK
+    max_live_calls: int | None = None
+    max_cost_usd: float | None = None
 
 
 def generate_match_id(
@@ -586,4 +599,7 @@ def run_match(
         trial_outcomes=tuple(trial_outcomes),
         critical_escapes=critical_escapes,
         victory_conditions_violated=victory_conditions_violated,
+        llm_mode=config.llm_mode,
+        max_live_calls=config.max_live_calls,
+        max_cost_usd=config.max_cost_usd,
     )

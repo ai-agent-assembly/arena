@@ -14,6 +14,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from arena.integrations.audit import ArenaAuditEvent
 from arena.integrations.decision import DefenseDecision
 from arena.integrations.models import ArenaActionAttempt
@@ -21,6 +23,7 @@ from arena.models.scenario import Decision, ScenarioSpec, Severity, TrialSpec, V
 from arena.reports.generate import (
     ARENA_REPORT_JSON_FILENAME,
     ARENA_REPORT_MD_FILENAME,
+    build_execution_metadata,
     build_report,
     generate_report,
 )
@@ -28,6 +31,7 @@ from arena.reports.models import SCHEMA_VERSION, MatchReport
 from arena.reports.scoring import MatchOutcome, score_match
 from arena.runner.base import AgentRunResult
 from arena.runner.events import MatchEvent, MatchEventType
+from arena.runner.llm_mode import LLMMode
 from arena.runner.match import AUDIT_LOG_FILENAME, MatchResult, TrialOutcome
 
 _MATCH_ID = "20260710T000000Z-test-scenario-deadbeef"
@@ -39,12 +43,14 @@ def _trial(
     id: str = "some-trial",
     expected: dict[str, Decision] | None = None,
     severity: Severity = Severity.LOW,
+    behavior_id: str | None = None,
 ) -> TrialSpec:
     return TrialSpec(
         id=id,
         description="A trial used for report generation tests.",
         expected=expected or {"some.action": Decision.ALLOW},
         severity=severity,
+        behavior_id=behavior_id,
     )
 
 
@@ -102,7 +108,13 @@ def _decided_event(
 
 
 def _match_result(
-    *, scenario: ScenarioSpec, trial_outcomes: list[TrialOutcome], workspace: Path
+    *,
+    scenario: ScenarioSpec,
+    trial_outcomes: list[TrialOutcome],
+    workspace: Path,
+    llm_mode: LLMMode = LLMMode.MOCK,
+    max_live_calls: int | None = None,
+    max_cost_usd: float | None = None,
 ) -> MatchResult:
     return MatchResult(
         match_id=_MATCH_ID,
@@ -119,6 +131,9 @@ def _match_result(
         trial_outcomes=tuple(trial_outcomes),
         critical_escapes=0,
         victory_conditions_violated=False,
+        llm_mode=llm_mode,
+        max_live_calls=max_live_calls,
+        max_cost_usd=max_cost_usd,
     )
 
 
@@ -175,6 +190,9 @@ def test_generate_report_markdown_contains_summary_and_trial_sections(tmp_path: 
     assert "## Trials" in markdown
     assert "`happy-trial` — agent-a — PASS" in markdown
     assert "some.action" in markdown
+    assert "## Execution" in markdown
+    assert "`mock`" in markdown
+    assert "- **Behavior profile:** (default)" in markdown
 
 
 def test_generate_report_markdown_shows_failed_trial_and_error(tmp_path: Path) -> None:
@@ -196,6 +214,36 @@ def test_generate_report_markdown_shows_failed_trial_and_error(tmp_path: Path) -
 
     assert "`broken-trial` — agent-a — FAIL" in markdown
     assert "agent crashed" in markdown
+
+
+def test_generate_report_markdown_shows_behavior_profile_per_trial(tmp_path: Path) -> None:
+    """AAASM-4406 AC1: a trial that targets a `BehaviorProfile` shows its
+    `behavior_id` in the rendered Markdown, distinct from a trial that
+    doesn't (which shows `(default)` rather than a forced/fabricated value).
+    """
+    targeted_trial = _trial(
+        id="injection-trial",
+        expected={"some.action": Decision.DENY},
+        behavior_id="prompt-injection-vulnerable",
+    )
+    scenario = _scenario(trial_ids=[targeted_trial.id])
+    workspace = tmp_path / "runs" / _MATCH_ID
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=targeted_trial, agent_id="agent-a")],
+        workspace=workspace,
+    )
+    audit_events = [
+        _decided_event(trial_id=targeted_trial.id, tool="some.action", effect=Decision.DENY)
+    ]
+    score = score_match(match_result, scenario, audit_events)
+
+    report_dir = generate_report(
+        match_result, score, audit_events, reports_root=tmp_path / "reports"
+    )
+    markdown = (report_dir / ARENA_REPORT_MD_FILENAME).read_text(encoding="utf-8")
+
+    assert "- **Behavior profile:** prompt-injection-vulnerable" in markdown
 
 
 # --- JSON content ----------------------------------------------------------------
@@ -274,3 +322,162 @@ def test_build_report_collects_unattributed_parse_error_events(tmp_path: Path) -
     assert len(report.trials) == 1
     assert len(report.trials[0].audit_events) == 1
     assert report.unattributed_audit_events == (parse_error_event,)
+
+
+# --- execution metadata (AAASM-4406) --------------------------------------------
+
+
+def test_build_execution_metadata_defaults_to_mock_deterministic_zero_cost(tmp_path: Path) -> None:
+    """AC4: a `mock`-mode match's report shows zero external model calls and
+    zero estimated cost, matching the every-match default.
+    """
+    trial = _trial(id="happy-trial")
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial)],
+        workspace=tmp_path / "runs" / _MATCH_ID,
+    )
+
+    execution = build_execution_metadata(match_result)
+
+    assert execution.llm_mode is LLMMode.MOCK
+    assert execution.deterministic is True
+    assert execution.external_model_calls == 0
+    assert execution.estimated_cost_usd == pytest.approx(0.0)
+
+
+def test_build_execution_metadata_replay_mode_is_also_deterministic_zero_cost(
+    tmp_path: Path,
+) -> None:
+    """AC4 extended to `replay`: also zero-cost/zero-call by construction —
+    only `live` may make a real model call.
+    """
+    trial = _trial(id="happy-trial")
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial)],
+        workspace=tmp_path / "runs" / _MATCH_ID,
+        llm_mode=LLMMode.REPLAY,
+    )
+
+    execution = build_execution_metadata(match_result)
+
+    assert execution.llm_mode is LLMMode.REPLAY
+    assert execution.deterministic is True
+    assert execution.external_model_calls == 0
+    assert execution.estimated_cost_usd == pytest.approx(0.0)
+
+
+def test_build_execution_metadata_live_mode_is_marked_non_deterministic(tmp_path: Path) -> None:
+    """AC3: a `live`-mode match's report is clearly marked non-deterministic."""
+    trial = _trial(id="happy-trial")
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial)],
+        workspace=tmp_path / "runs" / _MATCH_ID,
+        llm_mode=LLMMode.LIVE,
+    )
+
+    execution = build_execution_metadata(match_result)
+
+    assert execution.llm_mode is LLMMode.LIVE
+    assert execution.deterministic is False
+
+
+def test_build_execution_metadata_live_mode_reflects_configured_budget_guards(
+    tmp_path: Path,
+) -> None:
+    trial = _trial(id="happy-trial")
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial)],
+        workspace=tmp_path / "runs" / _MATCH_ID,
+        llm_mode=LLMMode.LIVE,
+        max_live_calls=5,
+        max_cost_usd=1.25,
+    )
+
+    execution = build_execution_metadata(match_result)
+
+    assert execution.external_model_calls == 5
+    assert execution.estimated_cost_usd == pytest.approx(1.25)
+
+
+def test_build_execution_metadata_live_mode_without_budget_guards_is_null(
+    tmp_path: Path,
+) -> None:
+    """No call-counting infrastructure exists yet (AAASM-4405's own scope
+    note) — a `live` match with no configured budget guard genuinely has no
+    number to report, so this is `None` ("unknown"), not a fabricated `0`.
+    """
+    trial = _trial(id="happy-trial")
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial)],
+        workspace=tmp_path / "runs" / _MATCH_ID,
+        llm_mode=LLMMode.LIVE,
+    )
+
+    execution = build_execution_metadata(match_result)
+
+    assert execution.external_model_calls is None
+    assert execution.estimated_cost_usd is None
+
+
+def test_build_report_execution_field_matches_build_execution_metadata(tmp_path: Path) -> None:
+    """AC2: the JSON-serializable `MatchReport.execution` is exactly what
+    `build_execution_metadata` derives for the same `MatchResult`.
+    """
+    trial = _trial(id="happy-trial")
+    scenario = _scenario(trial_ids=[trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[_outcome(trial=trial)],
+        workspace=tmp_path / "runs" / _MATCH_ID,
+        llm_mode=LLMMode.LIVE,
+        max_live_calls=3,
+        max_cost_usd=0.5,
+    )
+    audit_events = [_decided_event(trial_id=trial.id, tool="some.action")]
+    score = score_match(match_result, scenario, audit_events)
+
+    report = build_report(match_result, score, audit_events)
+
+    assert report.execution == build_execution_metadata(match_result)
+
+
+# --- behavior_id per trial (AAASM-4406) -----------------------------------------
+
+
+def test_build_report_trial_behavior_id_reflects_trial_spec(tmp_path: Path) -> None:
+    """AC1/AC2: `TrialReport.behavior_id` mirrors `TrialSpec.behavior_id`
+    when the trial targets a `BehaviorProfile`, and stays `None` when it
+    doesn't — never forced to a value either way.
+    """
+    targeted_trial = _trial(id="targeted-trial", behavior_id="secret-seeking")
+    plain_trial = _trial(id="plain-trial", expected={"other.action": Decision.ALLOW})
+    scenario = _scenario(trial_ids=[targeted_trial.id, plain_trial.id])
+    match_result = _match_result(
+        scenario=scenario,
+        trial_outcomes=[
+            _outcome(trial=targeted_trial, agent_id="agent-a"),
+            _outcome(trial=plain_trial, agent_id="agent-a"),
+        ],
+        workspace=tmp_path / "runs" / _MATCH_ID,
+    )
+    audit_events = [
+        _decided_event(trial_id=targeted_trial.id, tool="some.action"),
+        _decided_event(trial_id=plain_trial.id, tool="other.action"),
+    ]
+    score = score_match(match_result, scenario, audit_events)
+
+    report = build_report(match_result, score, audit_events)
+
+    by_trial_id = {trial.trial_id: trial for trial in report.trials}
+    assert by_trial_id["targeted-trial"].behavior_id == "secret-seeking"
+    assert by_trial_id["plain-trial"].behavior_id is None

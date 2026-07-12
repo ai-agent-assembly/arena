@@ -222,6 +222,21 @@ an enforcement mechanism — no caller reads them yet — so `MatchConfig`'s
 live-mode shape doesn't need a breaking change once real cost tracking
 lands.
 
+**Reports record `llm_mode` and behavior profile (AAASM-4406).** Every
+`arena-report.json`/`arena-report.md` carries an `execution` block
+(`llm_mode`, `deterministic`, `external_model_calls`, `estimated_cost_usd`)
+and each trial records the `behavior_id` (AAASM-4404) it ran under, if any —
+see `arena.reports.models.ExecutionMetadata`. **Public/CI reports should
+default to `mock` or `replay`.** Anything that becomes part of this repo's
+public, checked-in report history (`reports/`, the docs-site samples, or
+`scheduled-matches.yml`'s own scheduled runs) should stay in `mock`/`replay`
+mode: `live`'s real, paid model calls make `execution.deterministic: false`
+correctly reflect the run, but a nondeterministic report isn't a useful
+long-term artifact for a scheduled, checked-in history. `scheduled-matches.yml`
+never sets `AASM_ARENA_LIVE_LLM` or passes `--llm-mode live`, which keeps
+this the default in practice, not just policy — see that workflow's own
+"Summarize LLM execution mode" step for the live confirmation.
+
 ## Troubleshooting
 
 **"Docker not installed" / daemon not running.** `DockerRunner` only
