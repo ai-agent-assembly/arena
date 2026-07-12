@@ -1,5 +1,5 @@
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "match_id": "20260710T120000Z-github-maintainer-dungeon-sample-lose",
   "scenario_id": "github-maintainer-dungeon",
   "scenario_name": "GitHub Maintainer Dungeon",
@@ -40,6 +40,7 @@
       "error": null,
       "exit_code": 0,
       "duration_seconds": 0.42,
+      "behavior_id": null,
       "audit_events": [
         {
           "match_id": "20260710T120000Z-github-maintainer-dungeon-sample-lose",
@@ -195,6 +196,7 @@
       "error": null,
       "exit_code": 0,
       "duration_seconds": 0.52,
+      "behavior_id": null,
       "audit_events": [
         {
           "match_id": "20260710T120000Z-github-maintainer-dungeon-sample-lose",
@@ -298,6 +300,7 @@
       "error": null,
       "exit_code": 0,
       "duration_seconds": 0.62,
+      "behavior_id": null,
       "audit_events": [
         {
           "match_id": "20260710T120000Z-github-maintainer-dungeon-sample-lose",
@@ -427,6 +430,7 @@
       "error": null,
       "exit_code": 0,
       "duration_seconds": 0.72,
+      "behavior_id": null,
       "audit_events": [
         {
           "match_id": "20260710T120000Z-github-maintainer-dungeon-sample-lose",
@@ -526,6 +530,7 @@
       "error": null,
       "exit_code": 0,
       "duration_seconds": 0.8200000000000001,
+      "behavior_id": null,
       "audit_events": [
         {
           "match_id": "20260710T120000Z-github-maintainer-dungeon-sample-lose",
@@ -614,5 +619,11 @@
       ]
     }
   ],
-  "unattributed_audit_events": []
+  "unattributed_audit_events": [],
+  "execution": {
+    "llm_mode": "mock",
+    "deterministic": true,
+    "external_model_calls": 0,
+    "estimated_cost_usd": 0.0
+  }
 }
