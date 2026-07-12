@@ -21,6 +21,7 @@ from arena.integrations.adapter import AdapterChoice, build_agent_assembly_clien
 from arena.integrations.audit import read_audit_events
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
 from arena.reports.generate import build_execution_metadata, generate_report
+from arena.reports.github_issues import GitHubIssueCreationError, create_issues_for_report
 from arena.reports.index import refresh_static_index
 from arena.reports.issue_payload import build_issue_payloads_for_report
 from arena.reports.models import MatchReport
@@ -388,26 +389,25 @@ def reports_defeat_issues(
         True,
         "--dry-run/--no-dry-run",
         help="Print the GitHub issue payload(s) without filing anything (default). "
-        "--no-dry-run is not implemented: live issue creation is a maintainer-triggered "
-        "follow-up action, out of scope for this command (AAASM-4402).",
+        "--no-dry-run actually files each payload as a real GitHub issue via the `gh` "
+        "CLI (AAASM-4505, `arena.reports.github_issues`), skipping any defeat that "
+        "already has a matching open issue. Requires GH_TOKEN or GITHUB_TOKEN in the "
+        "environment — see reports/README.md for the required ARENA_DEFEAT_ISSUE_TOKEN "
+        "secret this is sourced from in CI.",
     ),
 ) -> None:
-    """Print the GitHub issue payload(s) `report_path`'s defeats would produce, one per
-    defeat signal (`arena.reports.defeat.classify_defeats` -> `route_defeat` ->
+    """Print — or, with `--no-dry-run`, actually file — the GitHub issue(s)
+    `report_path`'s defeats would produce, one per defeat signal
+    (`arena.reports.defeat.classify_defeats` -> `route_defeat` ->
     `arena.reports.issue_payload.build_issue_payload`).
 
-    Never calls the GitHub API — see `arena.reports.issue_payload`'s module docstring
-    for why. Prints nothing but a confirmation message for a winning report's empty
-    defeat list.
+    The default `--dry-run` path never calls the GitHub API — see
+    `arena.reports.issue_payload`'s module docstring for why. `--no-dry-run` hands
+    every payload to `arena.reports.github_issues.create_issues_for_report`, which
+    does call the GitHub API (via `gh`) and is the only path in this command that
+    does. Prints nothing but a confirmation message for a winning report's empty
+    defeat list, either way, and never even checks for a token in that case.
     """
-    if not dry_run:
-        console.print(
-            "[bold red]✗[/bold red] --no-dry-run is not implemented: live GitHub issue "
-            "creation is out of scope for this command (AAASM-4402) — omit the flag, or "
-            "pass --dry-run explicitly, to print the payload(s) instead."
-        )
-        raise typer.Exit(code=1)
-
     report = MatchReport.model_validate_json(report_path.read_text(encoding="utf-8"))
     payloads = build_issue_payloads_for_report(report)
 
@@ -415,14 +415,34 @@ def reports_defeat_issues(
         console.print("[green]No defeats found — no issues to file.[/green]")
         return
 
-    for index, payload in enumerate(payloads):
-        if index:
-            console.print("---")
-        console.print(f"[bold]repo:[/bold] {escape(payload.repo)}")
-        console.print(f"[bold]title:[/bold] {escape(payload.title)}")
-        console.print(f"[bold]labels:[/bold] {escape(', '.join(payload.labels))}")
-        console.print(f"[bold]fingerprint:[/bold] {escape(payload.fingerprint)}")
-        console.print(escape(payload.body))
+    if dry_run:
+        for index, payload in enumerate(payloads):
+            if index:
+                console.print("---")
+            console.print(f"[bold]repo:[/bold] {escape(payload.repo)}")
+            console.print(f"[bold]title:[/bold] {escape(payload.title)}")
+            console.print(f"[bold]labels:[/bold] {escape(', '.join(payload.labels))}")
+            console.print(f"[bold]fingerprint:[/bold] {escape(payload.fingerprint)}")
+            console.print(escape(payload.body))
+        return
+
+    try:
+        results = create_issues_for_report(payloads)
+    except GitHubIssueCreationError as exc:
+        console.print(f"[bold red]✗[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+    for result in results:
+        if result.skipped_duplicate:
+            console.print(
+                f"[yellow]⚠ skipped (duplicate of {escape(result.issue_url)})[/yellow] "
+                f"{escape(result.payload.repo)}: {escape(result.payload.title)}"
+            )
+        else:
+            console.print(
+                f"[bold green]✓ created {escape(result.issue_url)}[/bold green] "
+                f"{escape(result.payload.repo)}: {escape(result.payload.title)}"
+            )
 
 
 if __name__ == "__main__":
