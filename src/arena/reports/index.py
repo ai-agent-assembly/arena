@@ -61,15 +61,19 @@ this subtask's scope (see AAASM-4396's Story and AAASM-4397's own AC:
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from arena.reports.generate import ARENA_REPORT_JSON_FILENAME
 from arena.reports.markdown import render_markdown
+from arena.reports.models import SCHEMA_VERSION as MATCH_REPORT_SCHEMA_VERSION
 from arena.reports.models import MatchReport
 from arena.reports.scoring import MatchOutcome
+
+logger = logging.getLogger(__name__)
 
 #: Filenames written under `reports_root.parent` by `refresh_static_index`.
 LATEST_JSON_FILENAME = "latest.json"
@@ -168,13 +172,40 @@ def _discover_match_reports(reports_root: Path) -> list[MatchReport]:
     Returns an empty list (not an error) when `reports_root` doesn't exist
     yet — a fresh checkout with no matches run is a valid, expected state
     for `refresh_static_index` to handle.
+
+    A report file whose own `schema_version` doesn't match the current
+    `arena.reports.models.SCHEMA_VERSION` is skipped (with a logged
+    warning) rather than passed to `MatchReport.model_validate`, which
+    would otherwise raise `ValidationError` and crash the whole
+    `aasm-arena run` invocation calling this — e.g. a report written before
+    AAASM-4406 bumped `SCHEMA_VERSION` "1" -> "2" (adding the required
+    `execution` field) sitting alongside current-schema reports. This is
+    the same stale-schema-tolerance pattern AAASM-4506 already applied to
+    `scripts/render_latest_reports_page.py`'s `_load_latest`/
+    `_load_leaderboard`, applied here at the actual runtime discovery path
+    those functions don't cover — the raw JSON's `schema_version` key is
+    checked by name *before* any Pydantic validation is attempted, since a
+    future schema bump could change which fields are required in ways that
+    don't reliably produce the same error shape every time.
     """
     if not reports_root.is_dir():
         return []
     reports = []
     for report_path in sorted(reports_root.glob(f"*/{ARENA_REPORT_JSON_FILENAME}")):
         payload = json.loads(report_path.read_text(encoding="utf-8"))
-        reports.append(MatchReport.model_validate(payload))
+        if payload.get("schema_version") != MATCH_REPORT_SCHEMA_VERSION:
+            logger.warning(
+                "skipping %s: schema_version %r does not match current %r",
+                report_path,
+                payload.get("schema_version"),
+                MATCH_REPORT_SCHEMA_VERSION,
+            )
+            continue
+        try:
+            reports.append(MatchReport.model_validate(payload))
+        except ValidationError:
+            logger.warning("skipping %s: failed MatchReport validation", report_path, exc_info=True)
+            continue
     return reports
 
 
