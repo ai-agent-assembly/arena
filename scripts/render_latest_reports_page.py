@@ -19,10 +19,13 @@ currently on disk under `reports/`:
     uv run mkdocs build --strict
 
 `.github/workflows/documentation.yml` runs it before every build (PR-check
-and deploy alike), so the generated page is always fresh. The output file
-(`docs/latest-reports.md`) is gitignored — see `.gitignore` — since it's
-derived from `reports/`, not source, and would otherwise go stale the moment
-`reports/` changes without a matching commit to `docs/`.
+and deploy alike), so the generated page's *content* is always regenerated
+fresh from whatever is on disk under `reports/` at build time — no new commit
+required per refresh. The output file (`docs/latest-reports.md`) is
+nonetheless committed/tracked (not gitignored): the `git-authors` and
+`git-revision-date-localized` MkDocs plugins need existing git history for
+the path to pass `mkdocs build --strict`, so the tracked file is a snapshot/
+starting point, not the source of truth for the page's content.
 
 Handles the case where no match has ever run (`reports/leaderboard.json`
 missing, or present with zero matches) by rendering a placeholder instead of
