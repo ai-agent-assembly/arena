@@ -22,6 +22,8 @@ from arena.integrations.audit import read_audit_events
 from arena.models.manifest import AGENT_ID_PATTERN, AgentFramework
 from arena.reports.generate import generate_report
 from arena.reports.index import refresh_static_index
+from arena.reports.issue_payload import build_issue_payloads_for_report
+from arena.reports.models import MatchReport
 from arena.reports.scoring import score_match
 from arena.runner.match import AUDIT_LOG_FILENAME, MatchConfig, MatchOrchestrationError, run_match
 from arena.scenarios.loader import ScenarioLoadError, load_scenario, load_scenario_registry
@@ -41,6 +43,13 @@ scenarios_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(scenarios_app, name="scenarios")
+
+reports_app = typer.Typer(
+    name="reports",
+    help="Inspect generated match reports.",
+    no_args_is_help=True,
+)
+app.add_typer(reports_app, name="reports")
 
 console = Console()
 
@@ -322,6 +331,57 @@ def scenarios_validate(
     except ScenarioLoadError as exc:
         console.print(f"[red]FAILED[/red] {exc}")
         raise typer.Exit(code=1) from exc
+
+
+@reports_app.command("defeat-issues")
+def reports_defeat_issues(
+    report_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="Path to an arena-report.json file "
+        "(e.g. reports/matches/<match-id>/arena-report.json).",
+    ),
+    dry_run: bool = typer.Option(
+        True,
+        "--dry-run/--no-dry-run",
+        help="Print the GitHub issue payload(s) without filing anything (default). "
+        "--no-dry-run is not implemented: live issue creation is a maintainer-triggered "
+        "follow-up action, out of scope for this command (AAASM-4402).",
+    ),
+) -> None:
+    """Print the GitHub issue payload(s) `report_path`'s defeats would produce, one per
+    defeat signal (`arena.reports.defeat.classify_defeats` -> `route_defeat` ->
+    `arena.reports.issue_payload.build_issue_payload`).
+
+    Never calls the GitHub API — see `arena.reports.issue_payload`'s module docstring
+    for why. Prints nothing but a confirmation message for a winning report's empty
+    defeat list.
+    """
+    if not dry_run:
+        console.print(
+            "[bold red]✗[/bold red] --no-dry-run is not implemented: live GitHub issue "
+            "creation is out of scope for this command (AAASM-4402) — omit the flag, or "
+            "pass --dry-run explicitly, to print the payload(s) instead."
+        )
+        raise typer.Exit(code=1)
+
+    report = MatchReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+    payloads = build_issue_payloads_for_report(report)
+
+    if not payloads:
+        console.print("[green]No defeats found — no issues to file.[/green]")
+        return
+
+    for index, payload in enumerate(payloads):
+        if index:
+            console.print("---")
+        console.print(f"[bold]repo:[/bold] {escape(payload.repo)}")
+        console.print(f"[bold]title:[/bold] {escape(payload.title)}")
+        console.print(f"[bold]labels:[/bold] {escape(', '.join(payload.labels))}")
+        console.print(f"[bold]fingerprint:[/bold] {escape(payload.fingerprint)}")
+        console.print(escape(payload.body))
 
 
 if __name__ == "__main__":
