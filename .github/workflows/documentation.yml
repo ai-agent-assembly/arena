@@ -53,6 +53,14 @@ jobs:
       - name: Render latest reports page
         run: uv run python scripts/render_latest_reports_page.py
 
+      # Regenerate docs/agents-scenarios.md from the live agent manifests
+      # under agents/official/ + agents/community/ and scenario specs under
+      # scenarios/ (AAASM-4521) so the catalog page reflects whatever is
+      # currently on disk at build time — see
+      # scripts/render_agents_scenarios_page.py.
+      - name: Render agents & scenarios catalog page
+        run: uv run python scripts/render_agents_scenarios_page.py
+
       # Build-only: validates the site compiles under --strict. No mike
       # deploy, no push to gh-pages — PRs must never mutate published docs.
       - name: Build documentation
@@ -96,6 +104,14 @@ jobs:
       # same checkout, so this only needs to run once before both builds.
       - name: Render latest reports page
         run: uv run python scripts/render_latest_reports_page.py
+
+      # Regenerate docs/agents-scenarios.md from the live agent manifests
+      # under agents/official/ + agents/community/ and scenario specs under
+      # scenarios/ (AAASM-4521) so the deployed catalog page reflects
+      # whatever's on disk at deploy time — see
+      # scripts/render_agents_scenarios_page.py.
+      - name: Render agents & scenarios catalog page
+        run: uv run python scripts/render_agents_scenarios_page.py
 
       # Pre-flight: fail fast if the build itself is broken before touching
       # gh-pages.
