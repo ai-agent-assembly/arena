@@ -147,6 +147,7 @@ extra:
 nav:
   - Home: index.md
   - Get Involved: get-involved.md
+  - Roster: agents-scenarios.md
   - Concepts:
       - Architecture: architecture.md
       - Glossary: glossary.md
