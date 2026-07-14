@@ -1,0 +1,73 @@
+# CODEOWNERS file for arena
+# Format: file-pattern @owner
+# Order is important; the last matching pattern takes precedence.
+# Enforced only when branch protection requires Code Owner review.
+
+#######################################
+# Repository Default Owner
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+*                                     @Chisanan232
+
+# Software license annotation
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+/LICENSE                              @Chisanan232
+
+#######################################
+# Source Code
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/src/                                 @Chisanan232
+
+#######################################
+# Official (first-party) agent plugins
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/agents/official/                     @Chisanan232
+
+#######################################
+# Community-submitted agent plugins
+# Public, untrusted submissions land here via PR — route through the same
+# owner for review until a dedicated team exists.
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/agents/community/                    @Chisanan232
+
+#######################################
+# Scenarios / trials
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/scenarios/                           @Chisanan232
+
+#######################################
+# Scaffolding templates
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/templates/                           @Chisanan232
+
+#######################################
+# Tests
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/tests/                               @Chisanan232
+
+#######################################
+# Documentation
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/docs/                                @Chisanan232
+*.md                                  @Chisanan232
+
+#######################################
+# CI/CD Configuration
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/.github/                             @Chisanan232
+/.github/workflows/                   @Chisanan232
+
+#######################################
+# Build Configuration
+# TODO: Create @ai-agent-assembly/core-team team and replace @Chisanan232
+#######################################
+/pyproject.toml                       @Chisanan232
+/scripts/                             @Chisanan232
