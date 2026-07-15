@@ -10,7 +10,7 @@ from __future__ import annotations
 from .utils import chunked
 
 
-def import_csv(path: str, chunk_size: int = 1000) -> int:
+def import_csv(_path: str, chunk_size: int = 1000) -> int:
     """Fake CSV import entrypoint. Returns the number of fake rows processed."""
     rows_processed = 0
     for _batch in chunked(range(0), chunk_size):
