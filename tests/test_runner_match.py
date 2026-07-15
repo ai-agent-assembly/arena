@@ -145,7 +145,7 @@ def test_match_config_budget_guard_fields_are_settable(tmp_path: Path) -> None:
     )
 
     assert config.max_live_calls == 10
-    assert config.max_cost_usd == 5.0
+    assert config.max_cost_usd == pytest.approx(5.0)
 
 
 # --- generate_match_id ------------------------------------------------------
