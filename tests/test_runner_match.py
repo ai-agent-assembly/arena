@@ -228,7 +228,7 @@ def test_run_match_live_llm_mode_rejected_without_env_var(
     match_config: MatchConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(LIVE_LLM_ENV_VAR, raising=False)
-    live_config = replace(match_config, llm_mode=LLMMode.LIVE)
+    live_config: MatchConfig = replace(match_config, llm_mode=LLMMode.LIVE)
 
     with pytest.raises(MatchOrchestrationError, match=LIVE_LLM_ENV_VAR):
         run_match("test-scenario", live_config)
@@ -242,7 +242,7 @@ def test_run_match_live_llm_mode_rejected_before_any_scenario_loading(
     # rejection is unconditional, not contingent on the rest of the match
     # setup succeeding.
     monkeypatch.delenv(LIVE_LLM_ENV_VAR, raising=False)
-    live_config = replace(match_config, llm_mode=LLMMode.LIVE)
+    live_config: MatchConfig = replace(match_config, llm_mode=LLMMode.LIVE)
 
     with pytest.raises(MatchOrchestrationError, match=LIVE_LLM_ENV_VAR):
         run_match("does-not-exist", live_config)
@@ -252,7 +252,7 @@ def test_run_match_live_llm_mode_allowed_with_env_var_set(
     match_config: MatchConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(LIVE_LLM_ENV_VAR, "true")
-    live_config = replace(match_config, llm_mode=LLMMode.LIVE)
+    live_config: MatchConfig = replace(match_config, llm_mode=LLMMode.LIVE)
 
     # Live mode is now permitted; the run proceeds to real match
     # orchestration (no official agent makes a real model call today, so
