@@ -76,7 +76,7 @@ class DockerRunner:
     def run(
         self,
         manifest: AgentManifest,
-        trial: TrialSpec,
+        _trial: TrialSpec,
         *,
         workspace: Path,
     ) -> AgentRunResult:
