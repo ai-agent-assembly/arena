@@ -148,7 +148,7 @@ def test_create_issue_for_payload_creates_when_no_duplicate_exists() -> None:
     body_arg = create_argv[create_argv.index("--body") + 1]
     assert _PAYLOAD.body in body_arg
     assert f"<!-- arena-fingerprint: {_PAYLOAD.fingerprint} -->" in body_arg
-    for label in _PAYLOAD.labels:
+    for _label in _PAYLOAD.labels:
         assert "--label" in create_argv
     label_positions = [i for i, a in enumerate(create_argv) if a == "--label"]
     assert {create_argv[i + 1] for i in label_positions} == set(_PAYLOAD.labels)
