@@ -70,6 +70,32 @@ def _render_summary(report: MatchReport) -> list[str]:
     ]
 
 
+def _render_attempts_section(trial: TrialReport) -> list[str]:
+    """The "Attempts and decisions" block for one trial: either a one-line
+    "no attempts" note or a table with one row per recorded audit event.
+    """
+    lines = ["**Attempts and decisions:**", ""]
+    if not trial.audit_events:
+        lines.append("_No attempts recorded._")
+        lines.append("")
+        return lines
+
+    lines.append("| Tool | Resource | Args | Actual | Status | Reason |")
+    lines.append("|---|---|---|---|---|---|")
+    for event in trial.audit_events:
+        tool = event.attempt.tool if event.attempt is not None else "—"
+        resource = event.attempt.resource if event.attempt is not None else "—"
+        args = json.dumps(event.attempt.args, sort_keys=True) if event.attempt else "—"
+        actual = event.decision.effect.value if event.decision is not None else "—"
+        reason = event.decision.reason if event.decision is not None else (event.error or "—")
+        lines.append(
+            f"| `{_escape(tool)}` | {_escape(resource)} | {_escape(args)} | "
+            f"{actual} | {event.status.value} | {_escape(reason)} |"
+        )
+    lines.append("")
+    return lines
+
+
 def _render_trial(trial: TrialReport) -> list[str]:
     status = "PASS" if trial.passed else "FAIL"
     behavior = trial.behavior_id if trial.behavior_id is not None else "(default)"
@@ -95,25 +121,7 @@ def _render_trial(trial: TrialReport) -> list[str]:
         lines.append(f"| `{_escape(tool)}` | {decision.value} |")
     lines.append("")
 
-    lines.append("**Attempts and decisions:**")
-    lines.append("")
-    if not trial.audit_events:
-        lines.append("_No attempts recorded._")
-        lines.append("")
-    else:
-        lines.append("| Tool | Resource | Args | Actual | Status | Reason |")
-        lines.append("|---|---|---|---|---|---|")
-        for event in trial.audit_events:
-            tool = event.attempt.tool if event.attempt is not None else "—"
-            resource = event.attempt.resource if event.attempt is not None else "—"
-            args = json.dumps(event.attempt.args, sort_keys=True) if event.attempt else "—"
-            actual = event.decision.effect.value if event.decision is not None else "—"
-            reason = event.decision.reason if event.decision is not None else (event.error or "—")
-            lines.append(
-                f"| `{_escape(tool)}` | {_escape(resource)} | {_escape(args)} | "
-                f"{actual} | {event.status.value} | {_escape(reason)} |"
-            )
-        lines.append("")
+    lines.extend(_render_attempts_section(trial))
 
     return lines
 
