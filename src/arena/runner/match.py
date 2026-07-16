@@ -46,7 +46,7 @@ from arena.integrations.adapter import (
 )
 from arena.integrations.audit import ArenaAuditEvent, append_audit_event
 from arena.integrations.decision import DefenseDecision
-from arena.integrations.parser import parse_action_attempts
+from arena.integrations.parser import ActionAttemptParseResult, parse_action_attempts
 from arena.models.manifest import AgentManifest, EntrypointType
 from arena.models.scenario import ScenarioSpec, TrialSpec
 from arena.registry.discovery import (
@@ -372,6 +372,72 @@ def _trial_expectations_satisfied(
     )
 
 
+def _execute_runner(
+    *,
+    config: MatchConfig,
+    manifest: AgentManifest,
+    trial: TrialSpec,
+    trial_workspace: Path,
+) -> tuple[AgentRunResult, str | None]:
+    """Run one agent through one trial, converting any `Runner` crash into a
+    failed `AgentRunResult` — a Runner must never crash the whole match (see
+    `Runner.run`'s docstring). Returns the result and an error string, or
+    `None` when the runner returned normally.
+    """
+    runner = config.runner_registry.resolve(manifest)
+    try:
+        return runner.run(manifest, trial, workspace=trial_workspace), None
+    except Exception as exc:  # a Runner must never crash the match
+        error = str(exc)
+        return AgentRunResult(exit_code=1, stdout="", stderr=error, duration_seconds=0.0), error
+
+
+def _decide_and_audit_attempts(
+    *,
+    client: AgentAssemblyClient,
+    parse_result: ActionAttemptParseResult,
+    match_id: str,
+    trial: TrialSpec,
+    audit_path: Path,
+) -> tuple[dict[str, DefenseDecision], bool]:
+    """Persist one `ArenaAuditEvent` per parse error and per attempt, and
+    return the decided-by-tool map plus whether the trial must fail closed.
+
+    Any parse error or `MissingDecisionError` sets the fail-closed flag — see
+    this module's docstring for why a missing decision can never pass a trial.
+    """
+    decisions_by_tool: dict[str, DefenseDecision] = {}
+    audit_failure = bool(parse_result.errors)
+    for parse_error in parse_result.errors:
+        append_audit_event(
+            audit_path,
+            ArenaAuditEvent.for_parse_error(
+                match_id=match_id, severity=trial.severity, error=parse_error
+            ),
+        )
+    for attempt in parse_result.attempts:
+        try:
+            decision = client.decide(attempt)
+        except MissingDecisionError as exc:
+            audit_failure = True
+            append_audit_event(
+                audit_path,
+                ArenaAuditEvent.for_missing_decision(
+                    match_id=match_id,
+                    attempt=attempt,
+                    severity=trial.severity,
+                    error=str(exc),
+                ),
+            )
+            continue
+        decisions_by_tool[attempt.tool] = decision
+        append_audit_event(
+            audit_path,
+            ArenaAuditEvent.for_decision(match_id=match_id, attempt=attempt, decision=decision),
+        )
+    return decisions_by_tool, audit_failure
+
+
 def run_match(
     scenario_id: str,
     config: MatchConfig,
@@ -480,50 +546,22 @@ def run_match(
                 )
             )
 
-            runner = config.runner_registry.resolve(agent.manifest)
-            error: str | None = None
-            try:
-                result = runner.run(agent.manifest, trial, workspace=trial_workspace)
-            except (
-                Exception
-            ) as exc:  # a Runner must never crash the match; see Runner.run docstring
-                error = str(exc)
-                result = AgentRunResult(exit_code=1, stdout="", stderr=error, duration_seconds=0.0)
+            result, error = _execute_runner(
+                config=config,
+                manifest=agent.manifest,
+                trial=trial,
+                trial_workspace=trial_workspace,
+            )
 
             client = _resolve_client(config, trial)
             parse_result = parse_action_attempts(result.stdout)
-
-            decisions_by_tool: dict[str, DefenseDecision] = {}
-            audit_failure = bool(parse_result.errors)
-            for parse_error in parse_result.errors:
-                append_audit_event(
-                    audit_path,
-                    ArenaAuditEvent.for_parse_error(
-                        match_id=match_id, severity=trial.severity, error=parse_error
-                    ),
-                )
-            for attempt in parse_result.attempts:
-                try:
-                    decision = client.decide(attempt)
-                except MissingDecisionError as exc:
-                    audit_failure = True
-                    append_audit_event(
-                        audit_path,
-                        ArenaAuditEvent.for_missing_decision(
-                            match_id=match_id,
-                            attempt=attempt,
-                            severity=trial.severity,
-                            error=str(exc),
-                        ),
-                    )
-                    continue
-                decisions_by_tool[attempt.tool] = decision
-                append_audit_event(
-                    audit_path,
-                    ArenaAuditEvent.for_decision(
-                        match_id=match_id, attempt=attempt, decision=decision
-                    ),
-                )
+            decisions_by_tool, audit_failure = _decide_and_audit_attempts(
+                client=client,
+                parse_result=parse_result,
+                match_id=match_id,
+                trial=trial,
+                audit_path=audit_path,
+            )
 
             passed = (
                 error is None

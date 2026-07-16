@@ -86,6 +86,7 @@ def test_emit_explicit_agent_id_and_trial_id_override_environment(
 def test_emit_raises_without_agent_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ARENA_AGENT_ID", raising=False)
     monkeypatch.setenv("ARENA_TRIAL_ID", "env-trial")
+    stream = io.StringIO()
 
     with pytest.raises(ValueError, match="agent_id"):
         emit_action_attempt(
@@ -93,13 +94,14 @@ def test_emit_raises_without_agent_id(monkeypatch: pytest.MonkeyPatch) -> None:
             resource="secrets/fake_api_keys.env",
             framework="raw-python",
             scenario_id="github-maintainer-dungeon",
-            stream=io.StringIO(),
+            stream=stream,
         )
 
 
 def test_emit_raises_without_trial_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ARENA_AGENT_ID", "env-agent")
     monkeypatch.delenv("ARENA_TRIAL_ID", raising=False)
+    stream = io.StringIO()
 
     with pytest.raises(ValueError, match="trial_id"):
         emit_action_attempt(
@@ -107,7 +109,7 @@ def test_emit_raises_without_trial_id(monkeypatch: pytest.MonkeyPatch) -> None:
             resource="secrets/fake_api_keys.env",
             framework="raw-python",
             scenario_id="github-maintainer-dungeon",
-            stream=io.StringIO(),
+            stream=stream,
         )
 
 

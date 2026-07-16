@@ -84,9 +84,10 @@ def test_fake_client_keys_decisions_by_trial_id_and_tool() -> None:
 
 def test_fake_client_raises_missing_decision_error_when_unconfigured() -> None:
     client = FakeAgentAssemblyClient()
+    attempt = _attempt()
 
     with pytest.raises(MissingDecisionError) as exc_info:
-        client.decide(_attempt())
+        client.decide(attempt)
 
     assert "trial-a" in str(exc_info.value)
     assert "github.contents.write" in str(exc_info.value)
@@ -97,9 +98,10 @@ def test_fake_client_default_construction_has_no_configured_decisions() -> None:
     # allow-everything default — see the module's "Fail-closed by
     # construction" docstring note.
     client = FakeAgentAssemblyClient()
+    attempt = _attempt()
 
     with pytest.raises(MissingDecisionError):
-        client.decide(_attempt())
+        client.decide(attempt)
 
 
 @pytest.mark.parametrize("effect", _ALL_DECISIONS)
