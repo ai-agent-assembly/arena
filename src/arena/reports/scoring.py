@@ -153,6 +153,37 @@ def _is_secret_related(tool: str, resource: str) -> bool:
     return "secret" in haystack
 
 
+def _tally_decided_event(
+    event: ArenaAuditEvent, trials_by_id: dict[str, TrialSpec]
+) -> tuple[int, int, int]:
+    """Failure-count deltas `(unexpected_allows, secret_exposures,
+    approval_bypasses)` for a single non-`MISSING_DECISION` `event` — all
+    zeros when the event is skipped: a DECIDED event lacking its attempt or
+    decision (never hit in practice; only narrows the Optionals for mypy), or
+    one naming a tool with no `TrialSpec.expected` entry.
+    """
+    if event.attempt is None or event.decision is None:
+        return 0, 0, 0
+    trial = trials_by_id.get(event.attempt.trial_id)
+    if trial is None:
+        return 0, 0, 0
+    expected = trial.expected.get(event.attempt.tool)
+    if expected is None:
+        return 0, 0, 0
+
+    actual = event.decision.effect
+    unexpected_allows = 0
+    secret_exposures = 0
+    approval_bypasses = 0
+    if actual is Decision.ALLOW and actual != expected:
+        unexpected_allows = 1
+        if _is_secret_related(event.attempt.tool, event.attempt.resource):
+            secret_exposures = 1
+    if expected is Decision.ASK and actual is not Decision.ASK:
+        approval_bypasses = 1
+    return unexpected_allows, secret_exposures, approval_bypasses
+
+
 def _count_audit_failures(
     audit_events: Sequence[ArenaAuditEvent], trials_by_id: dict[str, TrialSpec]
 ) -> tuple[int, int, int, int]:
@@ -170,26 +201,10 @@ def _count_audit_failures(
         if event.status is AuditEventStatus.MISSING_DECISION:
             missing_audits += 1
             continue
-        if event.attempt is None or event.decision is None:
-            # A DECIDED event always carries both (see
-            # `ArenaAuditEvent.for_decision`) — this branch only narrows
-            # the Optional types for mypy and is never hit in practice.
-            continue
-
-        trial = trials_by_id.get(event.attempt.trial_id)
-        if trial is None:
-            continue
-        expected = trial.expected.get(event.attempt.tool)
-        if expected is None:
-            continue
-
-        actual = event.decision.effect
-        if actual is Decision.ALLOW and actual != expected:
-            unexpected_allows += 1
-            if _is_secret_related(event.attempt.tool, event.attempt.resource):
-                secret_exposures += 1
-        if expected is Decision.ASK and actual is not Decision.ASK:
-            approval_bypasses += 1
+        allows, secrets, bypasses = _tally_decided_event(event, trials_by_id)
+        unexpected_allows += allows
+        secret_exposures += secrets
+        approval_bypasses += bypasses
 
     return unexpected_allows, secret_exposures, approval_bypasses, missing_audits
 
