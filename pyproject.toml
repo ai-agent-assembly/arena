@@ -28,7 +28,7 @@ Repository = "https://github.com/ai-agent-assembly/arena"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1,<10.0.0",
-    "ruff>=0.15.21,<1.0.0",
+    "ruff>=0.15.22,<1.0.0",
     "mypy>=2.3.0,<3.0.0",
     "types-pyyaml>=6.0.12.20260518,<7.0",
 ]
