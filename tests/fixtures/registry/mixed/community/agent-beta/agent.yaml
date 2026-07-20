@@ -2,9 +2,9 @@ id: agent-beta
 name: Agent Beta
 framework: langgraph
 entrypoint:
-  type: command
-  command: "python main.py"
+  type: docker
+  image: "agent-beta:latest"
 runtime:
-  type: process
+  type: container
 scenarios:
   - scenario-b

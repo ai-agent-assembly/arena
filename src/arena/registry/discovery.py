@@ -22,7 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from arena.agents.loader import ManifestLoadError, load_manifest
-from arena.models.manifest import AgentFramework, AgentManifest
+from arena.models.manifest import AgentFramework, AgentManifest, require_containerized_entrypoint
 
 _MANIFEST_FILENAME = "agent.yaml"
 
@@ -108,8 +108,11 @@ def discover_agents(official_root: Path, community_root: Path) -> AgentRegistry:
     raising — an empty (or not-yet-created) registry is a valid state.
 
     Raises:
-        RegistryLoadError: a manifest fails to load/validate, or the same
-            agent id is declared more than once across official + community.
+        RegistryLoadError: a manifest fails to load/validate, the same agent
+            id is declared more than once across official + community, or a
+            community submission declares a non-containerized ('command')
+            entrypoint (community agents must run inside a container — see
+            `arena.models.manifest.require_containerized_entrypoint`).
     """
     discovered = _discover_source(official_root, AgentSource.OFFICIAL) + _discover_source(
         community_root, AgentSource.COMMUNITY
@@ -124,5 +127,15 @@ def discover_agents(official_root: Path, community_root: Path) -> AgentRegistry:
                 f"{seen[agent_id].path} and {agent.path}"
             )
         seen[agent_id] = agent
+
+    # Community submissions are untrusted and must run behind the container
+    # boundary; enforced after duplicate detection so an ambiguous id is still
+    # reported as a duplicate first. Official agents are exempt.
+    for agent in discovered:
+        if agent.source is AgentSource.COMMUNITY:
+            try:
+                require_containerized_entrypoint(agent.manifest)
+            except ValueError as exc:
+                raise RegistryLoadError(f"{agent.path}: {exc}") from exc
 
     return AgentRegistry(agents=tuple(discovered))

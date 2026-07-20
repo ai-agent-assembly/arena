@@ -87,7 +87,9 @@ def test_main_reflects_real_repo_agents_and_scenario(
 # --- against an isolated synthetic fixture set ---------------------------------------
 
 
-def _write_agent_manifest(agents_root: Path, agent_id: str, *, behaviors: bool = True) -> None:
+def _write_agent_manifest(
+    agents_root: Path, agent_id: str, *, behaviors: bool = True, containerized: bool = False
+) -> None:
     behaviors_yaml = (
         """
 behaviors:
@@ -99,6 +101,13 @@ behaviors:
         if behaviors
         else ""
     )
+    # Community submissions must be containerized (`require_containerized_entrypoint`),
+    # so a community fixture declares a docker entrypoint; official agents use command.
+    entrypoint_yaml = (
+        "entrypoint:\n  type: docker\n  image: fixture:latest\nruntime:\n  type: container"
+        if containerized
+        else 'entrypoint:\n  type: command\n  command: "true"\nruntime:\n  type: process'
+    )
     agent_dir = agents_root / agent_id
     agent_dir.mkdir(parents=True)
     (agent_dir / "agent.yaml").write_text(
@@ -106,11 +115,7 @@ behaviors:
 id: {agent_id}
 name: Fixture Agent {agent_id}
 framework: raw-python
-entrypoint:
-  type: command
-  command: "true"
-runtime:
-  type: process
+{entrypoint_yaml}
 scenarios:
   - fixture-scenario
 capabilities:
@@ -164,7 +169,9 @@ def test_main_renders_synthetic_fixture_agents_and_scenario(
     scenarios_root.mkdir(parents=True)
 
     _write_agent_manifest(official_root, "fixture-official-agent")
-    _write_agent_manifest(community_root, "fixture-community-agent", behaviors=False)
+    _write_agent_manifest(
+        community_root, "fixture-community-agent", behaviors=False, containerized=True
+    )
     _write_scenario(scenarios_root)
 
     output_path = tmp_path / "agents-scenarios.md"

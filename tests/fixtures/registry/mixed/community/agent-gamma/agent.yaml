@@ -2,10 +2,10 @@ id: agent-gamma
 name: Agent Gamma
 framework: raw-python
 entrypoint:
-  type: command
-  command: "python main.py"
+  type: docker
+  image: "agent-gamma:latest"
 runtime:
-  type: process
+  type: container
 scenarios:
   - scenario-a
   - scenario-b
