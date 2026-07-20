@@ -5,7 +5,7 @@ Guidance for Claude Code (and humans) working in this repository. This file hold
 config. When a fact here duplicates `README.md`, `pyproject.toml`, or a CI
 workflow, treat those as the source of truth and update them, not just this file.
 
-Org-wide baseline: https://github.com/ai-agent-assembly/.github/blob/main/CLAUDE.md
+Org-wide baseline: https://github.com/ai-agent-assembly/.github/blob/master/CLAUDE.md
 (org-universal conventions this file doesn't repeat).
 
 ## What this repo is
@@ -153,7 +153,7 @@ docs/                     # mkdocs-material site, deployed to
 
 ## Project policy
 
-- **JIRA:** project AAASM; set **Component** (`customfield_10041`) to
+- **JIRA:** project AAASM; set the native **Components** field to
   `ai-agent-assembly/arena`; Team (`customfield_10001`) = Pioneer.
   Epic → Story → Subtask (one Subtask ≈ one commit) + a `Verify …` subtask per
   Story.
