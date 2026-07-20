@@ -11,6 +11,10 @@ Use `ProcessRunner` when:
 - The agent is an official, reviewed agent shipped in this repo.
 - The agent's runtime needs are already satisfied by the CI/runner host's environment (Python, uv, etc.) with no extra isolation requirement beyond what a subprocess already gives you.
 
+This is enforced, not just conventional: a **community** submission that declares `entrypoint.type: command` is rejected at registry discovery (`arena.registry.discovery.discover_agents` via `arena.models.manifest.require_containerized_entrypoint`), so untrusted code can never take the host-subprocess path — community agents must declare a `docker` entrypoint.
+
+Like `DockerRunner`, `ProcessRunner` does **not** forward Arena's full process environment to the agent: only a small allowlist of base variables (`arena.runner.process._SAFE_BASE_ENV_VARS` — `PATH`/`HOME`/locale/`TMPDIR`/`TZ`) is inherited, plus whatever the manifest's `entrypoint.env` declares. CI/repository secrets in Arena's own environment are therefore withheld from the subprocess, mirroring `DockerRunner`'s "no host env or secret passthrough" default below.
+
 ## `DockerRunner` (`entrypoint.type: docker`)
 
 Starts the agent inside a container built from the image the manifest declares (`entrypoint.image`), via the `docker` CLI. This is the runner **community-submitted agents** are expected to use, and the one Arena leans on as its sandboxing story hardens over time (see `docs/architecture.md`, "Where sandboxing sits").

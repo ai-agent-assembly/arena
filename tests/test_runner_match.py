@@ -89,9 +89,14 @@ def match_config(tmp_path: Path) -> MatchConfig:
     community_root = tmp_path / "agents" / "community"
 
     _write_scenario(scenarios_root)
+    # Both runnable agents live under the official root: they declare
+    # `command` entrypoints (the ProcessRunner path these orchestration tests
+    # exercise), and community submissions are required to be containerized
+    # (`require_containerized_entrypoint`), so a community `command` agent would
+    # be rejected at registry discovery rather than run here.
     _write_agent(official_root, "agent-one", ["test-scenario"])
-    _write_agent(community_root, "agent-two", ["test-scenario"])
-    _write_agent(community_root, "agent-other", ["other-scenario"])
+    _write_agent(official_root, "agent-two", ["test-scenario"])
+    _write_agent(official_root, "agent-other", ["other-scenario"])
 
     return MatchConfig(
         scenarios_root=scenarios_root,

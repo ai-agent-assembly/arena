@@ -14,6 +14,8 @@ import shlex
 import sys
 from pathlib import Path
 
+import pytest
+
 from arena.models.manifest import (
     AgentEntrypoint,
     AgentManifest,
@@ -28,6 +30,7 @@ from arena.runner.process import ProcessRunner
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "process_runner"
 ECHO_CONTEXT_SCRIPT = FIXTURES_DIR / "echo_context.py"
 SLEEP_FOREVER_SCRIPT = FIXTURES_DIR / "sleep_forever.py"
+ECHO_ENV_PROBE_SCRIPT = FIXTURES_DIR / "echo_env_probe.py"
 
 _TRIAL = TrialSpec(
     id="example-trial",
@@ -88,6 +91,25 @@ def test_process_runner_merges_manifest_declared_env(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "manifest_env=from-manifest" in result.stdout
+
+
+def test_process_runner_does_not_leak_unlisted_host_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A secret planted in Arena's own environment (the kind of CI/repo
+    # credential DockerRunner deliberately withholds) must not be inherited by
+    # the agent subprocess, while an allowlisted base var (PATH) still is — see
+    # `arena.runner.process._SAFE_BASE_ENV_VARS`.
+    workspace = tmp_path / "workspace"
+    monkeypatch.setenv("AASM_TEST_HOST_SECRET", "super-secret-token")
+    command = f"{shlex.quote(sys.executable)} {shlex.quote(str(ECHO_ENV_PROBE_SCRIPT))}"
+
+    result = ProcessRunner().run(_manifest(command), _TRIAL, workspace=workspace)
+
+    assert result.exit_code == 0
+    assert "host_secret=ABSENT" in result.stdout
+    assert "super-secret-token" not in result.stdout
+    assert "path=set" in result.stdout
 
 
 def test_process_runner_enforces_timeout_without_raising(tmp_path: Path) -> None:

@@ -116,8 +116,12 @@ def test_run_agent_filter_selects_only_that_agent(tmp_path: Path) -> None:
     official_root = tmp_path / "agents" / "official"
     community_root = tmp_path / "agents" / "community"
     _write_scenario(scenarios_root)
+    # Both agents declare `command` entrypoints and so live under the official
+    # root: community submissions must be containerized
+    # (`require_containerized_entrypoint`), so a community `command` agent is
+    # rejected at discovery rather than run here.
     _write_agent(official_root, "agent-a", ["test-scenario"])
-    _write_agent(community_root, "agent-b", ["test-scenario"])
+    _write_agent(official_root, "agent-b", ["test-scenario"])
 
     result = runner.invoke(
         app,

@@ -18,6 +18,7 @@ MIXED_OFFICIAL = FIXTURES_DIR / "mixed" / "official"
 MIXED_COMMUNITY = FIXTURES_DIR / "mixed" / "community"
 DUPLICATE_OFFICIAL = FIXTURES_DIR / "duplicate" / "official"
 DUPLICATE_COMMUNITY = FIXTURES_DIR / "duplicate" / "community"
+COMMUNITY_COMMAND = FIXTURES_DIR / "community_command" / "community"
 
 
 def test_empty_registry_reports_zero_without_error(tmp_path: Path) -> None:
@@ -53,6 +54,23 @@ def test_mixed_official_and_community_agents_discovered() -> None:
 def test_duplicate_id_across_official_and_community_raises() -> None:
     with pytest.raises(RegistryLoadError, match="duplicate agent id 'agent-dup-id'"):
         discover_agents(DUPLICATE_OFFICIAL, DUPLICATE_COMMUNITY)
+
+
+def test_community_command_entrypoint_is_rejected(tmp_path: Path) -> None:
+    # A community submission must run inside a container; a 'command'
+    # entrypoint (executed as an Arena-host subprocess by ProcessRunner) is
+    # rejected at discovery, even though it is a schema-valid manifest.
+    with pytest.raises(RegistryLoadError, match="must use a 'docker' entrypoint"):
+        discover_agents(tmp_path / "official", COMMUNITY_COMMAND)
+
+
+def test_official_command_entrypoint_is_allowed(tmp_path: Path) -> None:
+    # The container requirement applies only to community submissions; official
+    # agents may (and do) use 'command' entrypoints. The same manifest that is
+    # rejected under the community root loads fine under the official root.
+    registry = discover_agents(COMMUNITY_COMMAND, tmp_path / "community")
+
+    assert {agent.manifest.id for agent in registry.agents} == {"host-subprocess-agent"}
 
 
 def test_filter_by_framework() -> None:

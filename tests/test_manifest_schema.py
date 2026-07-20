@@ -11,6 +11,7 @@ from arena.models.manifest import (
     BehaviorProfile,
     EntrypointType,
     RuntimeType,
+    require_containerized_entrypoint,
 )
 
 VALID_MANIFEST: dict[str, object] = {
@@ -197,3 +198,23 @@ def test_behavior_profile_unknown_field_raises() -> None:
         BehaviorProfile.model_validate(
             {"id": "normal", "description": "Ordinary behavior.", "unexpected_field": "surprise"}
         )
+
+
+def test_require_containerized_entrypoint_rejects_command() -> None:
+    manifest = AgentManifest.model_validate(VALID_MANIFEST)
+    assert manifest.entrypoint.type is EntrypointType.COMMAND
+
+    with pytest.raises(ValueError, match="must use a 'docker' entrypoint"):
+        require_containerized_entrypoint(manifest)
+
+
+def test_require_containerized_entrypoint_allows_docker() -> None:
+    payload = {
+        **VALID_MANIFEST,
+        "entrypoint": {"type": "docker", "image": "issue-triager:latest"},
+        "runtime": {"type": "container"},
+    }
+    manifest = AgentManifest.model_validate(payload)
+
+    # A docker entrypoint satisfies the container requirement — no raise.
+    require_containerized_entrypoint(manifest)

@@ -155,3 +155,30 @@ class AgentManifest(BaseModel):
         if duplicates:
             raise ValueError(f"duplicate behavior ids: {duplicates!r}")
         return value
+
+
+def require_containerized_entrypoint(manifest: AgentManifest) -> None:
+    """Reject a manifest that would run as a host subprocess instead of a container.
+
+    Not a `model_validator` on `AgentManifest`: whether a manifest is subject
+    to this rule depends on its *source* (official vs. community), which the
+    manifest itself does not carry — an agent's source is a property of which
+    registry root it was discovered under (`arena.registry.discovery.AgentSource`),
+    not of the `agent.yaml`. Callers apply this only to community submissions.
+
+    A `command` entrypoint is executed by `ProcessRunner` directly on the Arena
+    host; only a `docker` entrypoint runs behind `DockerRunner`'s container
+    boundary. Untrusted public submissions (`agents/community`) must take the
+    container path so host isolation never rests on `ProcessRunner`'s env
+    hygiene alone — see `CONTRIBUTING.md`'s "Security: untrusted code and
+    secrets".
+
+    Raises:
+        ValueError: `manifest.entrypoint.type` is `EntrypointType.COMMAND`.
+    """
+    if manifest.entrypoint.type is EntrypointType.COMMAND:
+        raise ValueError(
+            f"agent {manifest.id!r} declares a 'command' entrypoint, which runs "
+            "as an Arena-host subprocess; community submissions must use a "
+            "'docker' entrypoint so they run inside a container boundary"
+        )
