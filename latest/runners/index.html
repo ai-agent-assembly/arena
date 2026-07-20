@@ -1243,6 +1243,8 @@
 <li>The agent is an official, reviewed agent shipped in this repo.</li>
 <li>The agent's runtime needs are already satisfied by the CI/runner host's environment (Python, uv, etc.) with no extra isolation requirement beyond what a subprocess already gives you.</li>
 </ul>
+<p>This is enforced, not just conventional: a <strong>community</strong> submission that declares <code>entrypoint.type: command</code> is rejected at registry discovery (<code>arena.registry.discovery.discover_agents</code> via <code>arena.models.manifest.require_containerized_entrypoint</code>), so untrusted code can never take the host-subprocess path — community agents must declare a <code>docker</code> entrypoint.</p>
+<p>Like <code>DockerRunner</code>, <code>ProcessRunner</code> does <strong>not</strong> forward Arena's full process environment to the agent: only a small allowlist of base variables (<code>arena.runner.process._SAFE_BASE_ENV_VARS</code> — <code>PATH</code>/<code>HOME</code>/locale/<code>TMPDIR</code>/<code>TZ</code>) is inherited, plus whatever the manifest's <code>entrypoint.env</code> declares. CI/repository secrets in Arena's own environment are therefore withheld from the subprocess, mirroring <code>DockerRunner</code>'s "no host env or secret passthrough" default below.</p>
 <h2 id="dockerrunner-entrypointtype-docker"><code>DockerRunner</code> (<code>entrypoint.type: docker</code>)<a class="headerlink" href="#dockerrunner-entrypointtype-docker" title="Permanent link">&para;</a></h2>
 <p>Starts the agent inside a container built from the image the manifest declares (<code>entrypoint.image</code>), via the <code>docker</code> CLI. This is the runner <strong>community-submitted agents</strong> are expected to use, and the one Arena leans on as its sandboxing story hardens over time (see <code>docs/architecture.md</code>, "Where sandboxing sits").</p>
 <p>Use <code>DockerRunner</code> when:</p>
@@ -1284,7 +1286,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 10, 2026 06:45:25 UTC"><span class="timeago" datetime="2026-07-10T06:45:25+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 10, 2026 06:45:25 UTC">2026-07-10</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 20, 2026 01:57:57 UTC"><span class="timeago" datetime="2026-07-20T01:57:57+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 20, 2026 01:57:57 UTC">2026-07-20</span>
   </span>
 
     

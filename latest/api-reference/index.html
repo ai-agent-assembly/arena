@@ -1168,6 +1168,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#arena.models.manifest.require_containerized_entrypoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        require_containerized_entrypoint
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#arenamodelsscenario" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1377,6 +1388,17 @@
     <span class="md-ellipsis">
       
         AgentManifest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arena.models.manifest.require_containerized_entrypoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        require_containerized_entrypoint
       
     </span>
   </a>
@@ -1940,6 +1962,116 @@ unique.</p>
 
 </div>
 
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="arena.models.manifest.require_containerized_entrypoint" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">require_containerized_entrypoint</span>
+
+
+<a href="#arena.models.manifest.require_containerized_entrypoint" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">require_containerized_entrypoint</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">manifest</span><span class="p">:</span> <span class="n">AgentManifest</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Reject a manifest that would run as a host subprocess instead of a container.</p>
+<p>Not a <code>model_validator</code> on <code>AgentManifest</code>: whether a manifest is subject
+to this rule depends on its <em>source</em> (official vs. community), which the
+manifest itself does not carry — an agent's source is a property of which
+registry root it was discovered under (<code>arena.registry.discovery.AgentSource</code>),
+not of the <code>agent.yaml</code>. Callers apply this only to community submissions.</p>
+<p>A <code>command</code> entrypoint is executed by <code>ProcessRunner</code> directly on the Arena
+host; only a <code>docker</code> entrypoint runs behind <code>DockerRunner</code>'s container
+boundary. Untrusted public submissions (<code>agents/community</code>) must take the
+container path so host isolation never rests on <code>ProcessRunner</code>'s env
+hygiene alone — see <code>CONTRIBUTING.md</code>'s "Security: untrusted code and
+secrets".</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>manifest.entrypoint.type</code> is <code>EntrypointType.COMMAND</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/arena/models/manifest.py</code></summary>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-160">160</a></span>
+<span class="normal"><a href="#__codelineno-0-161">161</a></span>
+<span class="normal"><a href="#__codelineno-0-162">162</a></span>
+<span class="normal"><a href="#__codelineno-0-163">163</a></span>
+<span class="normal"><a href="#__codelineno-0-164">164</a></span>
+<span class="normal"><a href="#__codelineno-0-165">165</a></span>
+<span class="normal"><a href="#__codelineno-0-166">166</a></span>
+<span class="normal"><a href="#__codelineno-0-167">167</a></span>
+<span class="normal"><a href="#__codelineno-0-168">168</a></span>
+<span class="normal"><a href="#__codelineno-0-169">169</a></span>
+<span class="normal"><a href="#__codelineno-0-170">170</a></span>
+<span class="normal"><a href="#__codelineno-0-171">171</a></span>
+<span class="normal"><a href="#__codelineno-0-172">172</a></span>
+<span class="normal"><a href="#__codelineno-0-173">173</a></span>
+<span class="normal"><a href="#__codelineno-0-174">174</a></span>
+<span class="normal"><a href="#__codelineno-0-175">175</a></span>
+<span class="normal"><a href="#__codelineno-0-176">176</a></span>
+<span class="normal"><a href="#__codelineno-0-177">177</a></span>
+<span class="normal"><a href="#__codelineno-0-178">178</a></span>
+<span class="normal"><a href="#__codelineno-0-179">179</a></span>
+<span class="normal"><a href="#__codelineno-0-180">180</a></span>
+<span class="normal"><a href="#__codelineno-0-181">181</a></span>
+<span class="normal"><a href="#__codelineno-0-182">182</a></span>
+<span class="normal"><a href="#__codelineno-0-183">183</a></span>
+<span class="normal"><a href="#__codelineno-0-184">184</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-160"><a id="__codelineno-0-160" name="__codelineno-0-160"></a><span class="k">def</span><span class="w"> </span><span class="nf">require_containerized_entrypoint</span><span class="p">(</span><span class="n">manifest</span><span class="p">:</span> <span class="n">AgentManifest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-161"><a id="__codelineno-0-161" name="__codelineno-0-161"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Reject a manifest that would run as a host subprocess instead of a container.</span>
+</span><span id="__span-0-162"><a id="__codelineno-0-162" name="__codelineno-0-162"></a>
+</span><span id="__span-0-163"><a id="__codelineno-0-163" name="__codelineno-0-163"></a><span class="sd">    Not a `model_validator` on `AgentManifest`: whether a manifest is subject</span>
+</span><span id="__span-0-164"><a id="__codelineno-0-164" name="__codelineno-0-164"></a><span class="sd">    to this rule depends on its *source* (official vs. community), which the</span>
+</span><span id="__span-0-165"><a id="__codelineno-0-165" name="__codelineno-0-165"></a><span class="sd">    manifest itself does not carry — an agent&#39;s source is a property of which</span>
+</span><span id="__span-0-166"><a id="__codelineno-0-166" name="__codelineno-0-166"></a><span class="sd">    registry root it was discovered under (`arena.registry.discovery.AgentSource`),</span>
+</span><span id="__span-0-167"><a id="__codelineno-0-167" name="__codelineno-0-167"></a><span class="sd">    not of the `agent.yaml`. Callers apply this only to community submissions.</span>
+</span><span id="__span-0-168"><a id="__codelineno-0-168" name="__codelineno-0-168"></a>
+</span><span id="__span-0-169"><a id="__codelineno-0-169" name="__codelineno-0-169"></a><span class="sd">    A `command` entrypoint is executed by `ProcessRunner` directly on the Arena</span>
+</span><span id="__span-0-170"><a id="__codelineno-0-170" name="__codelineno-0-170"></a><span class="sd">    host; only a `docker` entrypoint runs behind `DockerRunner`&#39;s container</span>
+</span><span id="__span-0-171"><a id="__codelineno-0-171" name="__codelineno-0-171"></a><span class="sd">    boundary. Untrusted public submissions (`agents/community`) must take the</span>
+</span><span id="__span-0-172"><a id="__codelineno-0-172" name="__codelineno-0-172"></a><span class="sd">    container path so host isolation never rests on `ProcessRunner`&#39;s env</span>
+</span><span id="__span-0-173"><a id="__codelineno-0-173" name="__codelineno-0-173"></a><span class="sd">    hygiene alone — see `CONTRIBUTING.md`&#39;s &quot;Security: untrusted code and</span>
+</span><span id="__span-0-174"><a id="__codelineno-0-174" name="__codelineno-0-174"></a><span class="sd">    secrets&quot;.</span>
+</span><span id="__span-0-175"><a id="__codelineno-0-175" name="__codelineno-0-175"></a>
+</span><span id="__span-0-176"><a id="__codelineno-0-176" name="__codelineno-0-176"></a><span class="sd">    Raises:</span>
+</span><span id="__span-0-177"><a id="__codelineno-0-177" name="__codelineno-0-177"></a><span class="sd">        ValueError: `manifest.entrypoint.type` is `EntrypointType.COMMAND`.</span>
+</span><span id="__span-0-178"><a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-179"><a id="__codelineno-0-179" name="__codelineno-0-179"></a>    <span class="k">if</span> <span class="n">manifest</span><span class="o">.</span><span class="n">entrypoint</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">EntrypointType</span><span class="o">.</span><span class="n">COMMAND</span><span class="p">:</span>
+</span><span id="__span-0-180"><a id="__codelineno-0-180" name="__codelineno-0-180"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+</span><span id="__span-0-181"><a id="__codelineno-0-181" name="__codelineno-0-181"></a>            <span class="sa">f</span><span class="s2">&quot;agent </span><span class="si">{</span><span class="n">manifest</span><span class="o">.</span><span class="n">id</span><span class="si">!r}</span><span class="s2"> declares a &#39;command&#39; entrypoint, which runs &quot;</span>
+</span><span id="__span-0-182"><a id="__codelineno-0-182" name="__codelineno-0-182"></a>            <span class="s2">&quot;as an Arena-host subprocess; community submissions must use a &quot;</span>
+</span><span id="__span-0-183"><a id="__codelineno-0-183" name="__codelineno-0-183"></a>            <span class="s2">&quot;&#39;docker&#39; entrypoint so they run inside a container boundary&quot;</span>
+</span><span id="__span-0-184"><a id="__codelineno-0-184" name="__codelineno-0-184"></a>        <span class="p">)</span>
+</span></code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
 
 
 
