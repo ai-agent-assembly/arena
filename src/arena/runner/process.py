@@ -20,8 +20,22 @@ generically useful to any agent regardless of framework. `expected` is
 deliberately not passed: leaking the expected governance decision to the
 agent under test would let it game the trial instead of behaving naturally.
 The manifest's own `entrypoint.env` (declared in `agent.yaml`) is merged in
-underneath the `ARENA_*` vars, and the parent process's environment
-underneath that, so `ARENA_*` context always wins if a name collides.
+underneath the `ARENA_*` vars, and a small allowlist of the parent process's
+environment (`_SAFE_BASE_ENV_VARS`) underneath that, so `ARENA_*` context
+always wins if a name collides.
+
+**Host environment is NOT inherited wholesale.** Only the names in
+`_SAFE_BASE_ENV_VARS` are copied from Arena's own process environment; the
+rest (which may hold CI/repo secrets — API tokens, cloud credentials, signing
+keys) never reach the agent subprocess. This mirrors `DockerRunner`'s "no host
+env or secret passthrough" contract: a command-type agent runs on the Arena
+host without the container boundary, so leaking the full parent environment
+into it would hand any submitted `entrypoint.command` every secret in Arena's
+own environment. The allowlist is deliberately the minimum a subprocess
+generally needs to locate its interpreter/toolchain and behave sanely
+(`PATH`/`HOME` to launch, locale/`TMPDIR`/`TZ` for correct runtime behavior);
+anything an agent genuinely needs beyond that is declared explicitly in its
+manifest `entrypoint.env`.
 
 **Working directory.** The subprocess is launched with `cwd=workspace` — the
 per-(agent, trial) directory `arena.runner.match.run_match` already creates
@@ -60,13 +74,36 @@ DEFAULT_TIMEOUT_SECONDS = 30.0
 _TIMEOUT_EXIT_CODE = 124
 _LAUNCH_FAILURE_EXIT_CODE = 127
 
+#: The only names copied from Arena's own process environment into an agent
+#: subprocess. Everything else (CI/repo secrets, cloud credentials, tokens) is
+#: withheld — see this module's docstring for why a command-type agent must not
+#: inherit the full host environment. Kept to what a subprocess generally needs
+#: to find its interpreter/toolchain (`PATH`, `HOME`) and behave correctly
+#: (locale, temp dir, timezone); an agent needing anything else declares it in
+#: its manifest `entrypoint.env`.
+_SAFE_BASE_ENV_VARS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TMPDIR",
+        "TZ",
+    }
+)
+
 
 def _build_env(manifest: AgentManifest, trial: TrialSpec, *, workspace: Path) -> dict[str, str]:
-    """Parent env, overlaid with the manifest's declared env, overlaid with
-    Arena's own trial context — later entries win on key collision.
+    """A safe base-env allowlist, overlaid with the manifest's declared env,
+    overlaid with Arena's own trial context — later entries win on key
+    collision. The full host environment is deliberately not inherited (see
+    the module docstring): only `_SAFE_BASE_ENV_VARS` present in `os.environ`
+    are carried through.
     """
+    base_env = {name: os.environ[name] for name in _SAFE_BASE_ENV_VARS if name in os.environ}
     return {
-        **os.environ,
+        **base_env,
         **manifest.entrypoint.env,
         "ARENA_AGENT_ID": manifest.id,
         "ARENA_TRIAL_ID": trial.id,
