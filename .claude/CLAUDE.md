@@ -153,7 +153,7 @@ docs/                     # mkdocs-material site, deployed to
 
 ## Project policy
 
-- **JIRA:** project AAASM; set **Component** (`customfield_10041`) to
+- **JIRA:** project AAASM; set the native **Components** field to
   `ai-agent-assembly/arena`; Team (`customfield_10001`) = Pioneer.
   Epic → Story → Subtask (one Subtask ≈ one commit) + a `Verify …` subtask per
   Story.
