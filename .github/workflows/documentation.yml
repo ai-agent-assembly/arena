@@ -45,7 +45,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install docs dependency group
-        run: uv sync --group docs
+        run: uv sync --locked --no-build --no-binary-package arena --group docs
 
       # Regenerate docs/latest-reports.md from the live reports/leaderboard.json
       # and reports/latest.json (AAASM-4429) so the page reflects whatever is
@@ -85,7 +85,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install docs dependency group
-        run: uv sync --group docs
+        run: uv sync --locked --no-build --no-binary-package arena --group docs
 
       - name: Configure git identity for the gh-pages deploy commit
         run: |
