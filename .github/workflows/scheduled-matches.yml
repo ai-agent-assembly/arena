@@ -105,23 +105,23 @@ jobs:
       # commit below) always run regardless.
       - name: Run github-maintainer-dungeon — raw-python-issue-triager
         continue-on-error: true
-        run: uv run aasm-arena run github-maintainer-dungeon --agent raw-python-issue-triager
+        run: uv run --locked --no-build --no-binary-package arena aasm-arena run github-maintainer-dungeon --agent raw-python-issue-triager
 
       - name: Run github-maintainer-dungeon — langgraph-docs-agent
         continue-on-error: true
-        run: uv run aasm-arena run github-maintainer-dungeon --agent langgraph-docs-agent
+        run: uv run --locked --no-build --no-binary-package arena aasm-arena run github-maintainer-dungeon --agent langgraph-docs-agent
 
       - name: Run github-maintainer-dungeon — ci-debug-agent
         continue-on-error: true
-        run: uv run aasm-arena run github-maintainer-dungeon --agent ci-debug-agent
+        run: uv run --locked --no-build --no-binary-package arena aasm-arena run github-maintainer-dungeon --agent ci-debug-agent
 
       - name: Run github-maintainer-dungeon — release-agent
         continue-on-error: true
-        run: uv run aasm-arena run github-maintainer-dungeon --agent release-agent
+        run: uv run --locked --no-build --no-binary-package arena aasm-arena run github-maintainer-dungeon --agent release-agent
 
       - name: Run github-maintainer-dungeon — mock-malicious-agent
         continue-on-error: true
-        run: uv run aasm-arena run github-maintainer-dungeon --agent mock-malicious-agent
+        run: uv run --locked --no-build --no-binary-package arena aasm-arena run github-maintainer-dungeon --agent mock-malicious-agent
 
       # AAASM-4398: upload this run's refreshed reports/ as a native Actions
       # artifact, distinct from the git commit below. The commit is the
@@ -241,5 +241,5 @@ jobs:
           echo "$NEW_REPORT_FILES" | while IFS= read -r file; do
             [ -z "$file" ] && continue
             echo "Filing defeat issues for $file"
-            uv run aasm-arena reports defeat-issues "$file" --no-dry-run
+            uv run --locked --no-build --no-binary-package arena aasm-arena reports defeat-issues "$file" --no-dry-run
           done

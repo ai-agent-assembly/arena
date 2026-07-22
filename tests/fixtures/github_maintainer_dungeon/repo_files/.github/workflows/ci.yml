@@ -16,6 +16,6 @@ jobs:
       - name: Install deps (fake)
         run: uv sync --locked --no-build --no-binary-package arena
       - name: Lint (fake)
-        run: uv run ruff check .
+        run: uv run --locked --no-build --no-binary-package arena ruff check .
       - name: Test (fake)
-        run: uv run pytest -q
+        run: uv run --locked --no-build --no-binary-package arena pytest -q

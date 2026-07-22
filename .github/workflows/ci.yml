@@ -23,16 +23,16 @@ jobs:
         run: uv sync --locked --no-build --no-binary-package arena
 
       - name: Lint (ruff check)
-        run: uv run ruff check .
+        run: uv run --locked --no-build --no-binary-package arena ruff check .
 
       - name: Format check (ruff format)
-        run: uv run ruff format --check .
+        run: uv run --locked --no-build --no-binary-package arena ruff format --check .
 
       - name: Type-check (mypy)
-        run: uv run mypy src
+        run: uv run --locked --no-build --no-binary-package arena mypy src
 
       - name: Test (pytest)
-        run: uv run pytest
+        run: uv run --locked --no-build --no-binary-package arena pytest
 
       # AAASM-4363: Pydantic schemas for manifests/scenarios/reports don't
       # exist yet (they land in AAASM-4364/4368). Until they do, "schema
@@ -41,7 +41,7 @@ jobs:
       # validation teeth once those tickets land.
       - name: Schema smoke check (import every arena package)
         run: |
-          uv run python -c "
+          uv run --locked --no-build --no-binary-package arena python -c "
           import arena.cli
           import arena.agents
           import arena.integrations

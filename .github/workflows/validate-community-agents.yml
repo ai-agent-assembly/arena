@@ -35,4 +35,4 @@ jobs:
       # entries yet, so this step is a clean no-op before the first
       # community submission lands.
       - name: Validate agents/community manifests
-        run: uv run aasm-arena agents validate agents/community
+        run: uv run --locked --no-build --no-binary-package arena aasm-arena agents validate agents/community
