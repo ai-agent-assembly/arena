@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked --no-build --no-binary-package arena
 
       # `agents validate` on a directory validates every <agent-id>/agent.yaml
       # under it (schema + agent-id-matches-directory-name) and exits 0 with
