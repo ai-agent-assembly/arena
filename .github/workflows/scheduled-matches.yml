@@ -63,7 +63,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked --no-build --no-binary-package arena
 
       # AAASM-4406: confirm, in the run's own summary, that this workflow
       # never opts into real, paid LLM calls before any match actually
