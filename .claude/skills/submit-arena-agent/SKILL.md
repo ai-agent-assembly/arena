@@ -201,6 +201,7 @@ from arena.integrations.emit import emit_action_attempt
 _FRAMEWORK = "raw-python"
 _SCENARIO_ID = "github-maintainer-dungeon"
 
+
 def main() -> None:
     trial_id = os.environ.get("ARENA_TRIAL_ID", "<unknown-trial>")
     emit_action_attempt(
