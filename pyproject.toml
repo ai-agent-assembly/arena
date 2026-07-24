@@ -15,7 +15,7 @@ dependencies = [
     "pydantic>=2.13.4,<3.0.0",
     "pyyaml>=6.0.3,<7.0",
     "langgraph>=1.2.9",
-    "pydantic-ai-slim>=2.15.0,<3.0.0",
+    "pydantic-ai-slim>=2.16.0,<3.0.0",
 ]
 
 [project.scripts]
