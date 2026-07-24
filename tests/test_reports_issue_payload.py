@@ -273,9 +273,10 @@ def test_compute_fingerprint_is_deterministic() -> None:
     report = _load_sample_report("losing-match")
     classification = classify_defeats(report)[0]
 
-    assert compute_fingerprint(classification, report) == compute_fingerprint(
-        classification, report
-    )
+    first_fingerprint = compute_fingerprint(classification, report)
+    second_fingerprint = compute_fingerprint(classification, report)
+
+    assert first_fingerprint == second_fingerprint
 
 
 def test_compute_fingerprint_differs_across_distinct_classifications() -> None:
