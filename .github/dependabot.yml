@@ -11,8 +11,13 @@ updates:
     commit-message:
       prefix: ⬆
 
-  # Python (pyproject.toml / uv.lock)
-  - package-ecosystem: "pip"
+  # Python. This project is uv-managed: `pyproject.toml` declares the requirements
+  # and the committed `uv.lock` pins what CI installs (`uv sync --locked`). The "uv"
+  # ecosystem maintains both files. "pip" wrote only `pyproject.toml`, which left
+  # every PR failing at install against a stale lock, and left a transitive
+  # vulnerability — pinned in `uv.lock`, unnamed in `pyproject.toml` — unfixable by
+  # a security update. See AAASM-5793.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "daily"
