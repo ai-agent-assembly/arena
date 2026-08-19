@@ -1,0 +1,43 @@
+name: Claim Vocabulary Check
+
+# AAASM-5798 / AAASM-5599: ADR 0033's banned-absolute and undifferentiated-verb
+# rules against this repo's reader-facing Markdown (docs/**, README.md,
+# CONTRIBUTING.md, agents/official/**). Ported from agent-assembly's
+# check_claim_vocabulary.py (AAASM-5679), via docs Hub's, python-sdk's,
+# node-sdk's and go-sdk's (AAASM-5797/5798) ports. Per AAASM-5795's
+# federation-by-convention decision this repo's copy is independent -- see
+# scripts/check_claim_vocabulary.py's own docstring.
+#
+# No path filtering, matching this repo's own ci.yml/documentation.yml
+# convention (plain `pull_request:` / `push: branches: [main]`, no
+# paths/paths-ignore) -- unlike python-sdk/node-sdk (dedicated allow-list,
+# because those repos' own CI explicitly skips docs-only changes) or go-sdk
+# (paths-ignore, mirroring its docs-metadata.yml). This repo's existing
+# workflows already run on every PR regardless of which paths changed, so a
+# new filter here would be the odd one out, not the consistent choice.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  claim-vocabulary:
+    name: Check for banned-absolute and undifferentiated-verb claims
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Run the claim-vocabulary self-test
+        run: python3 scripts/check_claim_vocabulary.py --selftest
+
+      - name: Scan for banned-absolute and undifferentiated-verb claims
+        run: python3 scripts/check_claim_vocabulary.py --root .
