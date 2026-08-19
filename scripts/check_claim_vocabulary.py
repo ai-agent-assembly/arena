@@ -49,7 +49,10 @@ from pathlib import Path
 # --------------------------------------------------------------------------
 MACROS: dict[str, str] = {
     "SEP": r"(?:[-‑_\s]+)",
-    "DOC-NOUN": r"(?:reference|guide|list|example|walkthrough|inventory|history|re-audit|rewrite|set\b)",
+    "DOC-NOUN": (
+        r"(?:reference|guide|list|example|walkthrough|inventory|history"
+        r"|re-audit|rewrite|set\b)"
+    ),
     "GOV-NOUN": (
         r"(?:coverage|protection|mediation|interception|enforcement|visibility"
         r"|observability|monitoring|detection|inspection|audit(?:ing|s)?"
@@ -202,15 +205,31 @@ def _changed_lines(root: Path, base: str, targets: list[str]) -> dict[str, set[i
     is not exploitable regardless).
     """
     if not _SAFE_REF.match(base):
-        raise ValueError(f"--diff-base {base!r} is not a plain git ref (letters, digits, '.', '_', '-', '/' only)")
-    result = subprocess.run(  # NOSONAR (S4721): list-form argv, no shell=True; base validated above.
-        ["git", "-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--merge-base", base, "--", *targets],
+        raise ValueError(
+            f"--diff-base {base!r} is not a plain git ref "
+            "(letters, digits, '.', '_', '-', '/' only)"
+        )
+    result = subprocess.run(  # NOSONAR (S4721): list-form argv, no shell=True; base validated.
+        [
+            "git",
+            "-c",
+            "core.quotepath=false",
+            "diff",
+            "-U0",
+            "--no-color",
+            "--merge-base",
+            base,
+            "--",
+            *targets,
+        ],
         cwd=root,
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"git diff against {base!r} failed ({result.returncode}): {result.stderr.strip()}")
+        raise RuntimeError(
+            f"git diff against {base!r} failed ({result.returncode}): {result.stderr.strip()}"
+        )
 
     changed: dict[str, set[int]] = {}
     current: str | None = None
@@ -260,7 +279,7 @@ _BQ = re.compile(r"^((?:\s*>\s?)*)")
 def _blockquote_depth(line: str) -> tuple[int, str]:
     match = _BQ.match(line)
     marker = match.group(1) if match else ""
-    return marker.count(">"), line[len(marker):]
+    return marker.count(">"), line[len(marker) :]
 
 
 _META_TAG = re.compile(r"<meta\s[^>]*>", re.IGNORECASE | re.DOTALL)
@@ -500,7 +519,7 @@ def scan_text(path: str, original: str) -> list[Diagnostic]:
 
             line, col = position(m.start())
             end_line, _ = position(max(m.start(), m.end() - 1))
-            matched = re.sub(r"\s+", " ", original[m.start():m.end()]).strip()
+            matched = re.sub(r"\s+", " ", original[m.start() : m.end()]).strip()
 
             start, end = _logical_line_bounds(normalised, m.start())
             rel = m.start() - start
@@ -508,15 +527,31 @@ def scan_text(path: str, original: str) -> list[Diagnostic]:
                 lo <= rel < hi for lo, hi in _quoted_spans(match_text[start:end])
             ) and not _in_ranges(structural, m.start())
             if in_quote:
-                diagnostics.append(Diagnostic(
-                    path, line, col, end_line, QUOTE_RULE_ID, "info",
-                    f"{rule.rule_id} phrase inside a quoted span (negative example)", matched,
-                ))
+                diagnostics.append(
+                    Diagnostic(
+                        path,
+                        line,
+                        col,
+                        end_line,
+                        QUOTE_RULE_ID,
+                        "info",
+                        f"{rule.rule_id} phrase inside a quoted span (negative example)",
+                        matched,
+                    )
+                )
             else:
-                diagnostics.append(Diagnostic(
-                    path, line, col, end_line, rule.rule_id, rule.severity,
-                    f"banned claim wording ({rule.rule_id})", matched,
-                ))
+                diagnostics.append(
+                    Diagnostic(
+                        path,
+                        line,
+                        col,
+                        end_line,
+                        rule.rule_id,
+                        rule.severity,
+                        f"banned claim wording ({rule.rule_id})",
+                        matched,
+                    )
+                )
     return sorted(diagnostics, key=lambda d: (d.path, d.line, d.col, d.rule_id))
 
 
@@ -579,10 +614,17 @@ def main(argv: list[str]) -> int:
     for rel in targets:
         for d in scan_file(root, rel):
             touched = changed_lines.get(d.path, set()) if changed_lines is not None else set()
-            if changed_lines is not None and d.severity == "blocking" and not _introduced(d, touched):
+            is_blocking = d.severity == "blocking"
+            if changed_lines is not None and is_blocking and not _introduced(d, touched):
                 d = Diagnostic(
-                    d.path, d.line, d.col, d.end_line, d.rule_id, "pre-existing",
-                    d.message + " (pre-existing; not introduced by this change)", d.matched,
+                    d.path,
+                    d.line,
+                    d.col,
+                    d.end_line,
+                    d.rule_id,
+                    "pre-existing",
+                    d.message + " (pre-existing; not introduced by this change)",
+                    d.matched,
                 )
             diagnostics.append(d)
 
