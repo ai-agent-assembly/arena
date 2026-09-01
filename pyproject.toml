@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 dependencies = [
     "typer>=0.27.1,<1.0.0",
     "rich>=15.0.0,<16.0.0",
-    "pydantic>=2.13.4,<3.0.0",
+    "pydantic>=2.13.5,<3.0.0",
     "pyyaml>=6.0.3,<7.0",
     "langgraph>=1.2.11",
     "pydantic-ai-slim>=2.33.0,<3.0.0",
