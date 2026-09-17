@@ -13,6 +13,9 @@ on:
     paths:
       - "agents/community/**"
 
+permissions:
+  contents: read
+
 jobs:
   validate-community-manifests:
     name: Validate community agent manifests
