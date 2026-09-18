@@ -23,9 +23,30 @@ permissions:
 
 # One concurrent deployment so a fast-follow push doesn't race a previous
 # deploy on gh-pages.
+#
+# The group MUST stay ref-aware. It used to be the constant string
+# "docs-pages", shared by every ref and every trigger in the repository, with
+# cancel-in-progress: true — so a Dependabot PR opening seconds after a merge
+# killed the in-flight gh-pages deploy for that merge commit, and a push to main
+# killed unrelated PRs' docs builds. 11 of the 100 runs between 2026-08-03 and
+# 2026-09-14 were cancelled that way, 4 of them deploys; the most recent
+# (run 34848751597, the merge commit for PR #121) was killed 21 seconds in, so
+# those docs were never published and were only rescued incidentally by the next
+# push. Neither effect is visible: main declares no required status checks, so a
+# cancelled `mkdocs build --strict` blocks nothing, and a cancelled deploy just
+# leaves gh-pages a commit behind with nothing red anywhere. See AAASM-6107 —
+# and note that a CANCELLED run is not a passing run (AAASM-5794).
+#
+# The split below is on "does this run deploy?", not on `github.event_name ==
+# 'push'`: deploy_latest_documentation runs on push AND workflow_dispatch, and
+# both publish the same `latest` channel with mike, so both must share the one
+# deploy group or an operator republish could still race a push. Every
+# pull_request gets its own group, so a PR build can only ever supersede itself
+# — which is the one cancellation that is desirable, and the only one still
+# enabled.
 concurrency:
-  group: "docs-pages"
-  cancel-in-progress: true
+  group: docs-pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build_documentation:
