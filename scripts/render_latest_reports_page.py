@@ -3,10 +3,11 @@
 (AAASM-4429).
 
 `reports/leaderboard.json`/`reports/latest.json` (`arena.reports.index.
-LeaderboardIndex`/`LatestReportIndex`) live at the repo root, refreshed and
-committed to `main` by the `scheduled-matches` workflow (AAASM-4428) — see
-`reports/README.md`. MkDocs only builds content under `docs/`, so this
-script turns that live JSON into a Markdown page MkDocs can render, rather
+LeaderboardIndex`/`LatestReportIndex`) live at the repo root, refreshed by
+the `scheduled-matches` workflow (AAASM-4428), which publishes them onto
+`main` as a pull request (AAASM-6186) — see `reports/README.md`. MkDocs only
+builds content under `docs/`, so this script turns that live JSON into a
+Markdown page MkDocs can render, rather
 than the docs site trying to fetch `reports/*.json` client-side (which isn't
 reachable from the deployed site — `mike deploy` only publishes what
 `mkdocs build` produces from `docs/`, not the repo root).
@@ -96,7 +97,9 @@ STALE_AFTER = timedelta(days=2)
 WORKFLOW_URL = (
     "https://github.com/ai-agent-assembly/arena/blob/main/.github/workflows/scheduled-matches.yml"
 )
-WORKFLOW_RUNS_URL = "https://github.com/ai-agent-assembly/arena/actions/workflows/scheduled-matches.yml"
+WORKFLOW_RUNS_URL = (
+    "https://github.com/ai-agent-assembly/arena/actions/workflows/scheduled-matches.yml"
+)
 
 
 def _describe_age(age: timedelta) -> str:
@@ -157,10 +160,11 @@ def _render_placeholder() -> str:
 No live matches have run yet.
 
 The [`scheduled-matches`](https://github.com/ai-agent-assembly/arena/blob/main/.github/workflows/scheduled-matches.yml)
-workflow (AAASM-4428) runs real matches on a schedule and commits the
-refreshed `reports/leaderboard.json`/`reports/latest.json` back to `main` —
-once at least one match has run, this page will show the leaderboard and the
-most recent match's result.
+workflow (AAASM-4428) runs real matches on a schedule and publishes the
+refreshed `reports/leaderboard.json`/`reports/latest.json` onto `main` as a
+pull request — once at least one match has run and that pull request is
+merged, this page will show the leaderboard and the most recent match's
+result.
 
 In the meantime, see the [report schema](report-schema.md) page for the
 static, deterministic sample reports.
@@ -340,11 +344,16 @@ def main(now: datetime | None = None, require_live_index: bool = False) -> None:
     OUTPUT_PATH.write_text(_render_page(leaderboard, latest, now), encoding="utf-8")
     age = now - leaderboard.generated_at
     stale = " STALE —" if age > STALE_AFTER else ""
-    print(f"wrote {OUTPUT_PATH} ({len(leaderboard.matches)} match(es);{stale} {_describe_age(age)})")
+    print(
+        f"wrote {OUTPUT_PATH} ({len(leaderboard.matches)} match(es);{stale} {_describe_age(age)})"
+    )
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--require-live-index",
         action="store_true",
