@@ -48,6 +48,7 @@ script as a missing one.
 
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -287,29 +288,53 @@ def _render_page(
     return "\n".join(lines)
 
 
-def main(now: datetime | None = None) -> None:
+class UnrenderableIndexError(RuntimeError):
+    """Raised by `main(require_live_index=True)` instead of writing the
+    placeholder page — see that parameter's docstring."""
+
+
+def main(now: datetime | None = None, require_live_index: bool = False) -> None:
+    """Render `OUTPUT_PATH` from whatever is currently under `REPORTS_ROOT`.
+
+    `require_live_index=True` turns every placeholder fallback into an
+    `UnrenderableIndexError` instead. The docs build wants the fallback (a
+    repo with no matches yet must still build), but `scheduled-matches` —
+    which is what *produces* the index — wants the opposite: if the reports
+    it just wrote don't render, publishing them would land a page saying "no
+    live matches have run yet" and the reason would only surface on the
+    deploy after the merge (AAASM-6186). A `GITHUB_TOKEN`-opened pull request
+    gets no `pull_request` checks at all, so that workflow has to make this
+    assertion itself, before it publishes.
+    """
     now = now or datetime.now(timezone.utc)
-    if not LEADERBOARD_PATH.is_file():
+
+    def render_placeholder(reason: str) -> None:
+        if require_live_index:
+            raise UnrenderableIndexError(
+                f"{reason} — {OUTPUT_PATH} would fall back to the "
+                '"no live matches have run yet" placeholder, so the reports under '
+                f"{REPORTS_ROOT} are not renderable as a live index."
+            )
         OUTPUT_PATH.write_text(_render_placeholder(), encoding="utf-8")
-        print(f"wrote {OUTPUT_PATH} (placeholder — no {LEADERBOARD_PATH} found)")
+        print(f"wrote {OUTPUT_PATH} (placeholder — {reason})")
+
+    if not LEADERBOARD_PATH.is_file():
+        render_placeholder(f"no {LEADERBOARD_PATH} found")
         return
 
     leaderboard = _load_leaderboard(LEADERBOARD_PATH)
     if leaderboard is None:
-        OUTPUT_PATH.write_text(_render_placeholder(), encoding="utf-8")
-        print(f"wrote {OUTPUT_PATH} (placeholder — {LEADERBOARD_PATH} schema mismatch or invalid)")
+        render_placeholder(f"{LEADERBOARD_PATH} schema mismatch or invalid")
         return
     if not leaderboard.matches:
-        OUTPUT_PATH.write_text(_render_placeholder(), encoding="utf-8")
-        print(f"wrote {OUTPUT_PATH} (placeholder — {LEADERBOARD_PATH} has zero matches)")
+        render_placeholder(f"{LEADERBOARD_PATH} has zero matches")
         return
 
     latest: LatestReportIndex | None = None
     if LATEST_PATH.is_file():
         latest = _load_latest(LATEST_PATH)
         if latest is None:
-            OUTPUT_PATH.write_text(_render_placeholder(), encoding="utf-8")
-            print(f"wrote {OUTPUT_PATH} (placeholder — {LATEST_PATH} schema mismatch or invalid)")
+            render_placeholder(f"{LATEST_PATH} schema mismatch or invalid")
             return
 
     OUTPUT_PATH.write_text(_render_page(leaderboard, latest, now), encoding="utf-8")
@@ -318,5 +343,22 @@ def main(now: datetime | None = None) -> None:
     print(f"wrote {OUTPUT_PATH} ({len(leaderboard.matches)} match(es);{stale} {_describe_age(age)})")
 
 
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "--require-live-index",
+        action="store_true",
+        help=(
+            "fail instead of writing the placeholder page. For the publisher "
+            "(scheduled-matches), which must not ship reports it cannot render."
+        ),
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    main()
+    args = _parse_args()
+    try:
+        main(require_live_index=args.require_live_index)
+    except UnrenderableIndexError as error:
+        raise SystemExit(f"error: {error}") from error
