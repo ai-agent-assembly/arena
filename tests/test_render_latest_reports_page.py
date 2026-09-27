@@ -277,9 +277,7 @@ def _render_current(now: datetime, reports_root: Path) -> str:
     (reports_root / "leaderboard.json").write_text(
         json.dumps(_CURRENT_LEADERBOARD_PAYLOAD), encoding="utf-8"
     )
-    (reports_root / "latest.json").write_text(
-        json.dumps(_CURRENT_LATEST_PAYLOAD), encoding="utf-8"
-    )
+    (reports_root / "latest.json").write_text(json.dumps(_CURRENT_LATEST_PAYLOAD), encoding="utf-8")
     render.main(now=now)
     output = render.OUTPUT_PATH.read_text(encoding="utf-8")
     # A placeholder page carries no freshness statement at all, so it would
