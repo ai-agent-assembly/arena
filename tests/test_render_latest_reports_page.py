@@ -361,3 +361,63 @@ def test_a_future_stamped_index_is_not_reported_as_fresh(_patched_paths: Path) -
     output = _render_current(_FRESH_NOW - timedelta(days=365), _patched_paths)
 
     assert "(stamped in the future)" in output
+
+
+# --- --require-live-index: the publisher must not ship an unrenderable index --------
+
+
+def test_require_live_index_refuses_the_stale_nested_report_schema(_patched_paths: Path) -> None:
+    """The AAASM-4506 shape again, this time from the publisher's side. Under
+    the docs build this silently becomes the placeholder; `scheduled-matches`
+    must not publish reports whose page says no match has ever run.
+    """
+    reports_root = _patched_paths
+    (reports_root / "leaderboard.json").write_text(
+        json.dumps(_CURRENT_LEADERBOARD_PAYLOAD), encoding="utf-8"
+    )
+    (reports_root / "latest.json").write_text(json.dumps(_STALE_LATEST_PAYLOAD), encoding="utf-8")
+
+    with pytest.raises(render.UnrenderableIndexError, match="not renderable as a live index"):
+        render.main(now=_FRESH_NOW, require_live_index=True)
+
+    # Nothing was written: the caller decides what to do, and a half-written
+    # placeholder would be the very page this flag exists to prevent.
+    assert not render.OUTPUT_PATH.exists()
+
+
+@pytest.mark.parametrize(
+    "leaderboard",
+    [
+        pytest.param(None, id="leaderboard-missing"),
+        pytest.param(_STALE_LEADERBOARD_PAYLOAD, id="leaderboard-schema-stale"),
+        pytest.param({**_CURRENT_LEADERBOARD_PAYLOAD, "matches": []}, id="leaderboard-empty"),
+    ],
+)
+def test_require_live_index_refuses_every_placeholder_path(
+    _patched_paths: Path, leaderboard: dict[str, object] | None
+) -> None:
+    if leaderboard is not None:
+        (_patched_paths / "leaderboard.json").write_text(json.dumps(leaderboard), encoding="utf-8")
+
+    with pytest.raises(render.UnrenderableIndexError):
+        render.main(now=_FRESH_NOW, require_live_index=True)
+
+
+def test_require_live_index_is_satisfied_by_a_renderable_index(_patched_paths: Path) -> None:
+    """The flag must not be a blanket refusal — good data still renders, so a
+    green publish step means something.
+    """
+    output = _render_current(_FRESH_NOW, _patched_paths)  # asserts it is not the placeholder
+    render.OUTPUT_PATH.unlink()
+
+    render.main(now=_FRESH_NOW, require_live_index=True)
+
+    assert render.OUTPUT_PATH.read_text(encoding="utf-8") == output
+
+
+def test_the_placeholder_path_is_still_the_default() -> None:
+    """The docs build calls this script with no arguments and must keep
+    building on a repo where no match has run yet.
+    """
+    assert render._parse_args([]).require_live_index is False
+    assert render._parse_args(["--require-live-index"]).require_live_index is True
