@@ -49,6 +49,7 @@ script as a missing one.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +81,69 @@ _OUTCOME_EMOJI = {
     MatchOutcome.AGENT_ASSEMBLY_WINS: "✅",
     MatchOutcome.AGENT_ASSEMBLY_LOSES: "❌",
 }
+
+#: How old the published index may be before this page says so in its own
+#: words (AAASM-6186). `scheduled-matches` runs daily, so anything past two
+#: days means at least one run did not publish. The page previously carried
+#: only a bare ISO timestamp under a heading that read "Latest match", which
+#: a reader reasonably takes as "current": when the publish step failed for
+#: 76 consecutive days, the public page went on presenting 76-day-old results
+#: as the latest ones, and nothing on it distinguished that from an hour-old
+#: refresh. A timestamp is not a freshness claim; this is.
+STALE_AFTER = timedelta(days=2)
+
+WORKFLOW_URL = (
+    "https://github.com/ai-agent-assembly/arena/blob/main/.github/workflows/scheduled-matches.yml"
+)
+WORKFLOW_RUNS_URL = "https://github.com/ai-agent-assembly/arena/actions/workflows/scheduled-matches.yml"
+
+
+def _describe_age(age: timedelta) -> str:
+    """Human-readable age, coarse on purpose: this page is rebuilt on every
+    docs deploy, so minute-level precision would be noise."""
+    if age < timedelta(0):
+        # A published index stamped in the future is not something to render a
+        # soothing "0 hours old" for.
+        return "stamped in the future"
+    days = age.days
+    if days >= 1:
+        return f"{days} day{'s' if days != 1 else ''} old"
+    hours = age.seconds // 3600
+    if hours >= 1:
+        return f"{hours} hour{'s' if hours != 1 else ''} old"
+    return "under an hour old"
+
+
+def _render_freshness(generated_at: datetime, now: datetime) -> list[str]:
+    """The explicit as-of statement, plus a warning when the index is stale.
+
+    Rendered from the data's own `generated_at` rather than from the build
+    time, so a docs rebuild cannot make old results look fresh.
+    """
+    age = now - generated_at
+    lines = [
+        f"**Published index as of:** {generated_at.isoformat()} ({_describe_age(age)}).  ",
+        f"Refreshed daily by the [`scheduled-matches`]({WORKFLOW_URL}) workflow.",
+        "",
+    ]
+    if age <= STALE_AFTER:
+        return lines
+    lines.extend(
+        [
+            '!!! warning "These results are stale — treat them as a historical snapshot"',
+            "",
+            f"    The newest published match is {_describe_age(age)}, but matches are meant",
+            "    to run every day, so the publish path has not landed a refresh since",
+            f"    {generated_at.isoformat()}. **This is not a current view of Arena** —",
+            "    more recent matches may have run without their results ever reaching this",
+            "    page.",
+            "",
+            f"    Check the [`scheduled-matches` run history]({WORKFLOW_RUNS_URL}) and any",
+            "    open report-refresh pull request.",
+            "",
+        ]
+    )
+    return lines
 
 
 def _match_url(match_id: str, filename: str) -> str:
@@ -126,7 +190,9 @@ def _render_latest(latest: LatestReportIndex) -> list[str]:
     report = latest.report
     emoji = _OUTCOME_EMOJI[report.score.outcome]
     return [
-        "## Latest match",
+        # "Latest match" claimed currency this page cannot guarantee — all it
+        # knows is what was last published (AAASM-6186).
+        "## Most recent published match",
         "",
         f"**Match:** [`{report.match_id}`]({_match_url(report.match_id, 'arena-report.md')})  ",
         f"**Scenario:** {report.scenario_name} (`{report.scenario_id}`)  ",
@@ -206,8 +272,13 @@ def _load_latest(path: Path) -> LatestReportIndex | None:
         return None
 
 
-def _render_page(leaderboard: LeaderboardIndex, latest: LatestReportIndex | None) -> str:
+def _render_page(
+    leaderboard: LeaderboardIndex,
+    latest: LatestReportIndex | None,
+    now: datetime,
+) -> str:
     lines = ["# Latest reports", ""]
+    lines.extend(_render_freshness(leaderboard.generated_at, now))
     if latest is not None:
         lines.extend(_render_latest(latest))
         lines.append("")
@@ -216,7 +287,8 @@ def _render_page(leaderboard: LeaderboardIndex, latest: LatestReportIndex | None
     return "\n".join(lines)
 
 
-def main() -> None:
+def main(now: datetime | None = None) -> None:
+    now = now or datetime.now(timezone.utc)
     if not LEADERBOARD_PATH.is_file():
         OUTPUT_PATH.write_text(_render_placeholder(), encoding="utf-8")
         print(f"wrote {OUTPUT_PATH} (placeholder — no {LEADERBOARD_PATH} found)")
@@ -240,8 +312,10 @@ def main() -> None:
             print(f"wrote {OUTPUT_PATH} (placeholder — {LATEST_PATH} schema mismatch or invalid)")
             return
 
-    OUTPUT_PATH.write_text(_render_page(leaderboard, latest), encoding="utf-8")
-    print(f"wrote {OUTPUT_PATH} ({len(leaderboard.matches)} match(es))")
+    OUTPUT_PATH.write_text(_render_page(leaderboard, latest, now), encoding="utf-8")
+    age = now - leaderboard.generated_at
+    stale = " STALE —" if age > STALE_AFTER else ""
+    print(f"wrote {OUTPUT_PATH} ({len(leaderboard.matches)} match(es);{stale} {_describe_age(age)})")
 
 
 if __name__ == "__main__":
