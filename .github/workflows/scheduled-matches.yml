@@ -8,22 +8,33 @@ name: Scheduled Arena Matches
 # always-available examples of the report shape (see
 # `scripts/generate_report_samples.py`), independent of this workflow.
 #
-# Loop-avoidance (two layers):
-#   1. Primary: this workflow's report-refresh commit is pushed using the
-#      job's own default `GITHUB_TOKEN` (via `actions/checkout`'s persisted
-#      credentials). GitHub does not queue new workflow runs for pushes/PRs
-#      made with the GITHUB_TOKEN itself (see "Triggering a workflow from a
-#      workflow" in GitHub's docs on automatic token authentication) — so
-#      this push cannot cause `ci.yml`/`documentation.yml` (both
-#      `push: branches: [main]`) to run at all, regardless of what changed.
-#   2. Defense in depth: the commit message also carries `[skip ci]`, which
-#      GitHub recognizes repo-wide for any `push`/`pull_request`-triggered
-#      workflow. This keeps the same guarantee even if this workflow is ever
-#      changed to push with a PAT instead of `GITHUB_TOKEN` (which *would*
-#      otherwise be able to trigger other workflows).
-#   3. This workflow itself only listens to `schedule`/`workflow_dispatch` —
-#      it is never `push`-triggered — so there is no path back into itself
-#      either way.
+# How the refresh is published (AAASM-6186): to a bot branch, as a pull
+# request. `main` is protected — "Changes must be made through a pull
+# request" — so pushing the refresh directly to it is rejected outright
+# (`GH006: Protected branch update failed for refs/heads/main`) and the whole
+# run fails after the matches have already been run. It did exactly that on
+# 76 consecutive daily runs, which also left the public docs page presenting
+# 76-day-old results. A pull request is the route branch protection asks for;
+# the protection itself is untouched, and a human still reviews what lands.
+#
+# Nothing here can loop back into a workflow run:
+#   1. This workflow only listens to `schedule`/`workflow_dispatch` — never
+#      `push` or `pull_request` — so no event it produces can re-enter it.
+#   2. The push targets `bot/report-refresh/<base>`, and `ci.yml`/
+#      `documentation.yml` only run on `push` to `main`, so the push itself
+#      starts nothing.
+#   3. The pull request is opened with the job's own `GITHUB_TOKEN`, and
+#      GitHub does not start workflow runs for events created by that token
+#      (see "Triggering a workflow from a workflow" in the docs on automatic
+#      token authentication). Here that is a limitation rather than a safety
+#      property: this pull request arrives with *no* `pull_request` checks,
+#      which is why the job validates the refreshed index itself before
+#      pushing (see "Check the refreshed reports still render" below).
+#      Switching to a PAT later would simply give the pull request the
+#      normal PR checks — desirable, and still not a loop by 1 and 2. That
+#      is also why the commit no longer carries `[skip ci]`: with no push to
+#      `main` left to suppress, all `[skip ci]` would do is hide those
+#      checks from whoever reviews the refresh.
 on:
   schedule:
     # Once a day. Arena's official-agent matrix is small (5 agents x the one
@@ -51,10 +62,52 @@ jobs:
     name: Run scheduled Arena matches and refresh report index
     runs-on: ubuntu-latest
     permissions:
+      # contents: write pushes the refresh to the bot branch; pull-requests:
+      # write opens the pull request that carries it onto the base branch.
       contents: write
+      pull-requests: write
+    env:
+      # One long-lived bot branch per base ref, so a `workflow_dispatch`
+      # against a feature branch still publishes against that branch rather
+      # than aiming at `main` — the same intent the old direct push had in
+      # using `github.ref_name`.
+      PUBLISH_REF: bot/report-refresh/${{ github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Full history: the publish branch below is merged with the base ref
+          # rather than force-updated, which a shallow clone cannot do.
+          fetch-depth: 0
+
+      # Matches documentation.yml's deploy job's git identity for bot commits.
+      - name: Configure git identity for the report refresh commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Done before the matches run, so the arena code this job executes is
+      # the base ref's code, not a stale copy carried on the bot branch.
+      #
+      # Reusing one branch means an unreviewed refresh is never dropped: if
+      # the previous run's pull request is still open, this run's reports are
+      # added to it instead of starting a second one. Merging the base ref in
+      # (rather than resetting the branch to it) keeps the branch a
+      # fast-forward of what is already pushed, so publishing never needs a
+      # force-push.
+      - name: Switch to the report publish branch
+        run: |
+          if git ls-remote --exit-code --heads origin "$PUBLISH_REF" >/dev/null 2>&1; then
+            echo "Continuing the existing $PUBLISH_REF (an earlier refresh is still unmerged)."
+            git fetch --no-tags origin "$PUBLISH_REF"
+            git switch -c "$PUBLISH_REF" FETCH_HEAD
+            # Merge the exact commit this run checked out, so the merge cannot
+            # depend on a remote-tracking ref having been fetched.
+            git merge --no-edit "$GITHUB_SHA"
+          else
+            echo "Starting $PUBLISH_REF from $GITHUB_REF_NAME."
+            git switch -c "$PUBLISH_REF"
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -137,12 +190,6 @@ jobs:
           path: reports/
           retention-days: 30
 
-      # Matches documentation.yml's deploy job's git identity for bot commits.
-      - name: Configure git identity for the report refresh commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
       # AAASM-4505: capture which arena-report.json files this run itself
       # produced, *before* `git add` below stages them — a freshly written
       # report is untracked (`git status --porcelain`'s `??` prefix) at this
@@ -174,24 +221,66 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Only commit/push when something under reports/ actually changed —
+      # The pull request this job opens gets no `pull_request` checks (see the
+      # header), so the one thing that must not reach the base branch
+      # unnoticed is checked here: reports that `docs/latest-reports.md`
+      # cannot render. `--require-live-index` fails instead of quietly
+      # emitting the "no live matches have run yet" placeholder — the
+      # AAASM-4506 schema-drift shape, which otherwise only shows up as a
+      # blank docs page on the deploy after the merge.
+      - name: Check the refreshed reports still render
+        if: steps.report_status.outputs.changed == 'true'
+        run: |
+          uv run --locked --no-build --no-binary-package arena \
+            python scripts/render_latest_reports_page.py --require-live-index
+          # The page is regenerated by documentation.yml on every build; the
+          # tracked copy is only a snapshot, so keep it in step with the
+          # reports being published rather than leaving it a build behind.
+          git add docs/latest-reports.md
+
+      # Only commit/publish when something under reports/ actually changed —
       # e.g. every match above unexpectedly erroring before writing a report
       # should not produce an empty, no-op commit.
       #
-      # Pushes back to whatever ref this run actually checked out
-      # (`github.ref_name`) rather than a hardcoded `main`: on `schedule`
-      # that's always the default branch, but on `workflow_dispatch` it's
-      # whichever branch was selected — so a manual test run dispatched
-      # against a feature branch commits its report refresh there instead
-      # of accidentally landing on `main`.
-      - name: Commit and push refreshed reports
+      # The push goes to the bot branch and the pull request targets whatever
+      # ref this run actually checked out (`github.ref_name`) rather than a
+      # hardcoded `main`: on `schedule` that's always the default branch, but
+      # on `workflow_dispatch` it's whichever branch was selected — so a
+      # manual test run dispatched against a feature branch offers its report
+      # refresh there instead of aiming at `main`.
+      #
+      # Only ever one open pull request per base ref: a still-open one is
+      # updated in place by this push, so an unreviewed refresh is never
+      # dropped and reviewers never face a queue of near-identical PRs.
+      - name: Publish refreshed reports as a pull request
         if: steps.report_status.outputs.changed == 'true'
         env:
-          TARGET_REF: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          git commit -m "🔧 (reports): Refresh live match reports [skip ci]"
-          git pull --rebase origin "$TARGET_REF"
-          git push origin "HEAD:$TARGET_REF"
+          git commit -m "🔧 (reports): Refresh live match reports"
+          git push origin "HEAD:refs/heads/$PUBLISH_REF"
+          existing=$(gh pr list --head "$PUBLISH_REF" --base "$BASE_REF" --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Added this run's reports to the open refresh PR #$existing." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh pr create --head "$PUBLISH_REF" --base "$BASE_REF" \
+            --title "🔧 (reports): Refresh live match reports" \
+            --body "$(printf '%s\n' \
+              "Automated by [\`scheduled-matches\`]($RUN_URL) — the daily real-match run (AAASM-4428)." \
+              "" \
+              "\`main\` requires changes to arrive by pull request, so the refreshed \`reports/\`" \
+              "index is offered here rather than pushed directly (AAASM-6186)." \
+              "" \
+              "**How to verify:** the run linked above shows each match's result and this run's" \
+              "\`reports/\` as a downloadable artifact. \`docs/latest-reports.md\` was regenerated" \
+              "and asserted to render as a live index before this branch was pushed." \
+              "" \
+              "Until this merges, the published docs page states its own age and warns that the" \
+              "results shown are stale.")"
 
       # AAASM-4505: file real GitHub issues for every real defeat this run's
       # matches produced (`arena.reports.github_issues`, via `aasm-arena

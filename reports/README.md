@@ -15,8 +15,9 @@ read Arena's source to know what to expect.
 Unlike most generated output, it is **tracked in git**: the
 `scheduled-matches` GitHub Actions workflow
 (`.github/workflows/scheduled-matches.yml`, AAASM-4428) runs real matches on
-a schedule (and on manual `workflow_dispatch`) and commits the refreshed
-`latest.json`/`latest.md`/`leaderboard.json`/`matches/` back to `main`, so
+a schedule (and on manual `workflow_dispatch`) and publishes the refreshed
+`latest.json`/`latest.md`/`leaderboard.json`/`matches/` onto `main` as a pull
+request (AAASM-6186 — `main` is protected, so a direct push is rejected), so
 `reports/` on `main` always reflects a real, recent match history a
 docs/website consumer can fetch directly — no CI artifact download, no
 backend service, no Arena installation required. See `.gitignore` for the
@@ -209,9 +210,13 @@ today, though:
   `https://raw.githubusercontent.com/ai-agent-assembly/arena/main/reports/latest.json`
   (and the equivalent for `leaderboard.json` / any
   `matches/<match-id>/arena-report.json`) — a plain, unauthenticated HTTP
-  GET that always reflects whatever `scheduled-matches.yml` (AAASM-4428)
-  last committed to `main`. The GitHub Contents API is the equivalent
-  option for a consumer that wants commit metadata alongside the file.
+  GET that always reflects the last report refresh merged into `main`.
+  Note that the merge is what makes a refresh visible here: `scheduled-
+  matches.yml` opens a pull request rather than pushing to protected `main`
+  (AAASM-6186), so a run that has completed but not been reviewed yet is not
+  reflected in this URL. The published docs page states its own age for
+  exactly that reason. The GitHub Contents API is the equivalent option for
+  a consumer that wants commit metadata alongside the file.
 - **What does *not* resolve yet:** there is no `docs.agent-assembly.com/arena/reports/...`
   URL. `mkdocs.yml`'s `site_url: https://docs.agent-assembly.com/arena/`
   (this repo's own docs site, aggregated into the docs hub per the

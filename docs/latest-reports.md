@@ -1,6 +1,20 @@
 # Latest reports
 
-## Latest match
+**Published index as of:** 2026-07-12T12:15:48.949357+00:00 (76 days old).  
+Refreshed daily by the [`scheduled-matches`](https://github.com/ai-agent-assembly/arena/blob/main/.github/workflows/scheduled-matches.yml) workflow.
+
+!!! warning "These results are stale — treat them as a historical snapshot"
+
+    The newest published match is 76 days old, but matches are meant
+    to run every day, so the publish path has not landed a refresh since
+    2026-07-12T12:15:48.949357+00:00. **This is not a current view of Arena** —
+    more recent matches may have run without their results ever reaching this
+    page.
+
+    Check the [`scheduled-matches` run history](https://github.com/ai-agent-assembly/arena/actions/workflows/scheduled-matches.yml) and any
+    open report-refresh pull request.
+
+## Most recent published match
 
 **Match:** [`20260712T121548Z-github-maintainer-dungeon-fdd93d15`](https://github.com/ai-agent-assembly/arena/blob/main/reports/matches/20260712T121548Z-github-maintainer-dungeon-fdd93d15/arena-report.md)  
 **Scenario:** GitHub Maintainer Dungeon (`github-maintainer-dungeon`)  

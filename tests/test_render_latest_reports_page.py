@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -99,6 +100,28 @@ _CURRENT_LEADERBOARD_PAYLOAD = {
             "generated_at": "2026-07-12T09:22:24Z",
         }
     ],
+}
+
+#: The current-schema counterpart of `_STALE_LATEST_PAYLOAD`: same shape, but
+#: the nested `MatchReport` carries today's schema version and the
+#: AAASM-4406 `execution` block, so `_load_latest` accepts it and the page
+#: renders its most-recent-match section rather than falling back.
+_CURRENT_LATEST_PAYLOAD = {
+    **_STALE_LATEST_PAYLOAD,
+    "match_id": "current-match",
+    "path": "matches/current-match/arena-report.json",
+    "report": {
+        **_STALE_LATEST_PAYLOAD["report"],
+        "schema_version": render.MATCH_REPORT_SCHEMA_VERSION,
+        "match_id": "current-match",
+        "execution": {
+            "llm_mode": "mock",
+            "deterministic": True,
+            "external_model_calls": 0,
+            "estimated_cost_usd": 0.0,
+        },
+        "score": {**_STALE_LATEST_PAYLOAD["report"]["score"], "match_id": "current-match"},
+    },
 }
 
 
@@ -230,9 +253,169 @@ def test_main_renders_full_page_for_current_schema_data(_patched_paths: Path) ->
         json.dumps(_CURRENT_LEADERBOARD_PAYLOAD), encoding="utf-8"
     )
 
-    render.main()
+    render.main(now=datetime(2026, 7, 12, 15, 0, tzinfo=timezone.utc))
 
     output = render.OUTPUT_PATH.read_text(encoding="utf-8")
     assert output != render._render_placeholder()
     assert "## Leaderboard" in output
     assert "current-match" in output
+
+
+# --- AAASM-6186: the page must state its own freshness ------------------------------
+
+#: `_CURRENT_LEADERBOARD_PAYLOAD` is stamped `2026-07-12T09:22:25Z`. These two
+#: clocks sit either side of `STALE_AFTER` relative to that stamp.
+_FRESH_NOW = datetime(2026, 7, 12, 15, 0, tzinfo=timezone.utc)
+_STALE_NOW = datetime(2026, 9, 26, 12, 17, tzinfo=timezone.utc)
+
+
+def _render_current(now: datetime, reports_root: Path) -> str:
+    """Render the full page (leaderboard *and* most-recent-match section) from
+    current-schema data, with the clock injected so every assertion below is
+    deterministic.
+    """
+    (reports_root / "leaderboard.json").write_text(
+        json.dumps(_CURRENT_LEADERBOARD_PAYLOAD), encoding="utf-8"
+    )
+    (reports_root / "latest.json").write_text(json.dumps(_CURRENT_LATEST_PAYLOAD), encoding="utf-8")
+    render.main(now=now)
+    output = render.OUTPUT_PATH.read_text(encoding="utf-8")
+    # A placeholder page carries no freshness statement at all, so it would
+    # pass a "no warning" assertion vacuously.
+    assert output != render._render_placeholder()
+    return output
+
+
+def test_stale_index_is_not_presented_as_current(_patched_paths: Path) -> None:
+    """The AAASM-6186 defect. `scheduled-matches` failed to publish for 76
+    consecutive days and the page went on presenting that 76-day-old run
+    under a heading reading "Latest match", with nothing to distinguish it
+    from an hour-old refresh. A bare timestamp is not a freshness claim.
+    """
+    output = _render_current(_STALE_NOW, _patched_paths)
+
+    assert "## Latest match" not in output
+    assert "## Most recent published match" in output
+    assert "!!! warning" in output
+    assert "76 days old" in output
+    assert "not a current view of Arena" in output
+    # The reader is pointed at where the failure actually is.
+    assert render.WORKFLOW_RUNS_URL in output
+
+
+def test_fresh_index_carries_an_as_of_line_and_no_warning(_patched_paths: Path) -> None:
+    """The freshness statement is unconditional; only the warning is
+    conditional. A page that says nothing when fresh would leave a reader
+    with no way to tell "fresh" from "the staleness check is broken".
+    """
+    output = _render_current(_FRESH_NOW, _patched_paths)
+
+    assert "**Published index as of:** 2026-07-12T09:22:25+00:00 (5 hours old)." in output
+    assert "!!! warning" not in output
+    assert "stale" not in output
+
+
+def test_the_boundary_is_the_data_timestamp_not_the_build_time(_patched_paths: Path) -> None:
+    """Rebuilding the docs must not make old results look fresh: the age is
+    computed from the index's own `generated_at`. `documentation.yml`
+    regenerates this page on every deploy, so a build-time-derived "fresh"
+    stamp would have read as current on all 76 of those days.
+    """
+    generated_at = datetime.fromisoformat(
+        _CURRENT_LEADERBOARD_PAYLOAD["generated_at"].replace("Z", "+00:00")
+    )
+
+    just_inside = _render_current(generated_at + render.STALE_AFTER, _patched_paths)
+    just_outside = _render_current(
+        generated_at + render.STALE_AFTER + timedelta(minutes=1), _patched_paths
+    )
+
+    assert "!!! warning" not in just_inside
+    assert "!!! warning" in just_outside
+
+
+@pytest.mark.parametrize(
+    ("age", "expected"),
+    [
+        (timedelta(minutes=30), "under an hour old"),
+        (timedelta(hours=1), "1 hour old"),
+        (timedelta(hours=5), "5 hours old"),
+        (timedelta(days=1), "1 day old"),
+        (timedelta(days=76), "76 days old"),
+        (timedelta(days=76, hours=13), "76 days old"),
+        (timedelta(minutes=-5), "stamped in the future"),
+    ],
+)
+def test_age_is_described_in_units_a_reader_can_act_on(age: timedelta, expected: str) -> None:
+    assert render._describe_age(age) == expected
+
+
+def test_a_future_stamped_index_is_not_reported_as_fresh(_patched_paths: Path) -> None:
+    """Clock skew or a hand-edited index must not buy silence. `now` before
+    `generated_at` means the age is negative, which is smaller than every
+    threshold -- so the staleness branch would pass it, and the as-of line is
+    the only thing that can say so.
+    """
+    output = _render_current(_FRESH_NOW - timedelta(days=365), _patched_paths)
+
+    assert "(stamped in the future)" in output
+
+
+# --- --require-live-index: the publisher must not ship an unrenderable index --------
+
+
+def test_require_live_index_refuses_the_stale_nested_report_schema(_patched_paths: Path) -> None:
+    """The AAASM-4506 shape again, this time from the publisher's side. Under
+    the docs build this silently becomes the placeholder; `scheduled-matches`
+    must not publish reports whose page says no match has ever run.
+    """
+    reports_root = _patched_paths
+    (reports_root / "leaderboard.json").write_text(
+        json.dumps(_CURRENT_LEADERBOARD_PAYLOAD), encoding="utf-8"
+    )
+    (reports_root / "latest.json").write_text(json.dumps(_STALE_LATEST_PAYLOAD), encoding="utf-8")
+
+    with pytest.raises(render.UnrenderableIndexError, match="not renderable as a live index"):
+        render.main(now=_FRESH_NOW, require_live_index=True)
+
+    # Nothing was written: the caller decides what to do, and a half-written
+    # placeholder would be the very page this flag exists to prevent.
+    assert not render.OUTPUT_PATH.exists()
+
+
+@pytest.mark.parametrize(
+    "leaderboard",
+    [
+        pytest.param(None, id="leaderboard-missing"),
+        pytest.param(_STALE_LEADERBOARD_PAYLOAD, id="leaderboard-schema-stale"),
+        pytest.param({**_CURRENT_LEADERBOARD_PAYLOAD, "matches": []}, id="leaderboard-empty"),
+    ],
+)
+def test_require_live_index_refuses_every_placeholder_path(
+    _patched_paths: Path, leaderboard: dict[str, object] | None
+) -> None:
+    if leaderboard is not None:
+        (_patched_paths / "leaderboard.json").write_text(json.dumps(leaderboard), encoding="utf-8")
+
+    with pytest.raises(render.UnrenderableIndexError):
+        render.main(now=_FRESH_NOW, require_live_index=True)
+
+
+def test_require_live_index_is_satisfied_by_a_renderable_index(_patched_paths: Path) -> None:
+    """The flag must not be a blanket refusal — good data still renders, so a
+    green publish step means something.
+    """
+    output = _render_current(_FRESH_NOW, _patched_paths)  # asserts it is not the placeholder
+    render.OUTPUT_PATH.unlink()
+
+    render.main(now=_FRESH_NOW, require_live_index=True)
+
+    assert render.OUTPUT_PATH.read_text(encoding="utf-8") == output
+
+
+def test_the_placeholder_path_is_still_the_default() -> None:
+    """The docs build calls this script with no arguments and must keep
+    building on a repo where no match has run yet.
+    """
+    assert render._parse_args([]).require_live_index is False
+    assert render._parse_args(["--require-live-index"]).require_live_index is True
