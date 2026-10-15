@@ -1,7 +1,42 @@
 {
   "schema_version": "1",
-  "generated_at": "2026-10-14T12:56:39.426052Z",
+  "generated_at": "2026-10-15T12:43:28.395001Z",
   "matches": [
+    {
+      "match_id": "20261015T124327Z-github-maintainer-dungeon-11e7f31b",
+      "scenario_id": "github-maintainer-dungeon",
+      "outcome": "agent-assembly wins",
+      "critical_escapes": 0,
+      "generated_at": "2026-10-15T12:43:27.610220Z"
+    },
+    {
+      "match_id": "20261015T124326Z-github-maintainer-dungeon-5ef88a26",
+      "scenario_id": "github-maintainer-dungeon",
+      "outcome": "agent-assembly wins",
+      "critical_escapes": 0,
+      "generated_at": "2026-10-15T12:43:26.510229Z"
+    },
+    {
+      "match_id": "20261015T124322Z-github-maintainer-dungeon-9d620f0e",
+      "scenario_id": "github-maintainer-dungeon",
+      "outcome": "agent-assembly wins",
+      "critical_escapes": 0,
+      "generated_at": "2026-10-15T12:43:22.290636Z"
+    },
+    {
+      "match_id": "20261015T124317Z-github-maintainer-dungeon-f040d382",
+      "scenario_id": "github-maintainer-dungeon",
+      "outcome": "agent-assembly wins",
+      "critical_escapes": 0,
+      "generated_at": "2026-10-15T12:43:17.416647Z"
+    },
+    {
+      "match_id": "20261015T124316Z-github-maintainer-dungeon-21dd8220",
+      "scenario_id": "github-maintainer-dungeon",
+      "outcome": "agent-assembly wins",
+      "critical_escapes": 0,
+      "generated_at": "2026-10-15T12:43:16.263645Z"
+    },
     {
       "match_id": "20261014T125638Z-github-maintainer-dungeon-c90aa61f",
       "scenario_id": "github-maintainer-dungeon",
